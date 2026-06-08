@@ -79,7 +79,6 @@ public:
     static QPixmap* G_ICON;
     static QPixmap* CG_ICON;
     static QPixmap* GRAPH_PROPERTY_ICON;
-    static QPixmap* PROMOTE_TO_LAYER_ICON;
 
     static bool sStaticPixmapsLoaded;
     static void loadStaticPixmaps(int iconSize);
@@ -146,6 +145,9 @@ private:
     void cancelInlineExpressionEdit();
 
     ContainerBox *getPromoteTargetGroup();
+    void togglePromoteDemote();
+    void toggleMotionBlur();
+    void updateMotionBlurCheckState(BoundingBox *box);
 
     void clearSelected() { setSelected(false); }
     void switchContentVisibleAction();
@@ -190,7 +192,9 @@ private:
     ParticleOverLifeWidget *mOverLifeWidget;
     QLabel *mPointValueLabel;
 
-    PixmapActionButton *mPromoteToLayerButton;
+    QPushButton *mPromoteDemoteToggle = nullptr;
+    QPushButton *mMotionBlurToggle = nullptr;
+    QPushButton *mCollapseToggle = nullptr;
     eComboBox *mPropertyComboBox;
     eComboBox *mBlendModeCombo;
     eComboBox *mPathBlendModeCombo;
@@ -199,11 +203,19 @@ private:
     QPushButton *mMattePickWhipButton;
     eComboBox *mParentLayerCombo;
     eComboBox *mTrackMatteCombo;
-    BoolPropertyWidget *mCollapseCheckbox;
 
     bool mTimelineParentVisible = false;
     bool mTimelineMatteVisible = false;
     bool mUpdatingTimelineRelations = false;
+
+    QPixmap* mTimelineSoloOnIcon = nullptr;
+    QPixmap* mTimelineSoloOffIcon = nullptr;
+    QPixmap* mTimelineCollapseOnIcon = nullptr;
+    QPixmap* mTimelineCollapseOffIcon = nullptr;
+    QPixmap* mTimelinePromoteOnIcon = nullptr;
+    QPixmap* mTimelinePromoteOffIcon = nullptr;
+    QPixmap* mTimelineMBOnIcon = nullptr;
+    QPixmap* mTimelineMBOffIcon = nullptr;
 
     ConnContext mTargetConn;
 };

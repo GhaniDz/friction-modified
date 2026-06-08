@@ -32,7 +32,8 @@ void HddCachableCacheHandler::drawCacheOnTimeline(QPainter * const p,
                                                   const int startFrame,
                                                   const int endFrame,
                                                   const qreal unit,
-                                                  const int maxX) const {
+                                                  const int maxX,
+                                                  const int drawHeight) const {
     if(startFrame > endFrame) return;
     p->save();
     const qreal quStartFrame = startFrame/unit;
@@ -78,7 +79,7 @@ void HddCachableCacheHandler::drawCacheOnTimeline(QPainter * const p,
             //lastStoresInMemory = storesInMemory;
         //}
         p->drawRect(x, qRound(drawRect.top()),
-                    qMin(maxX, x + width) - x, /*qRound(drawRect.height())*/4);
+                    qMin(maxX, x + width) - x, drawHeight);
         lastDrawnFrame = afterMaxFrame;
         lastDrawX = x + width;
     }

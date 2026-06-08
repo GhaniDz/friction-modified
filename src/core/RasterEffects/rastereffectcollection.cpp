@@ -181,6 +181,8 @@ qsptr<RasterEffect> createRasterEffectForNonCustomType(const RasterEffectType ty
             return enve::make_shared<PuppetEffect>();
         case(RasterEffectType::PARTICLE_SYSTEM):
             return enve::make_shared<ParticleSystemEffect>();
+        case(RasterEffectType::MIRROR):
+            return enve::make_shared<MirrorEffect>();
         default: return nullptr;
     }
 }

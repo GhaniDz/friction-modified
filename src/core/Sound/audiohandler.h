@@ -83,6 +83,10 @@ public:
 
     QAudioOutput* audioOutput() const { return mAudioOutput; }
 
+    qint64 getProcessedUSecs() const {
+        return mAudioOutput ? mAudioOutput->processedUSecs() : 0;
+    }
+
 signals:
     void deviceChanged();
 

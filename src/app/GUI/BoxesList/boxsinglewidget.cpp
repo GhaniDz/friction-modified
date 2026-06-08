@@ -30,13 +30,18 @@
 #include "widgets/colorsettingswidget.h"
 
 #include "Boxes/containerbox.h"
+#include "Boxes/internallinkcanvas.h"
 #include "widgets/qrealanimatorvalueslider.h"
 #include "boxscroller.h"
 #include "GUI/keysview.h"
 #include "renderhandler.h"
 #include "pointhelpers.h"
+#include "RasterEffects/motionblureffect.h"
 #include "GUI/BoxesList/boolpropertywidget.h"
 #include "boxtargetwidget.h"
+
+#include <QPainter>
+#include <QtMath>
 #include "particleoverlifewidget.h"
 #include "Properties/boxtargetproperty.h"
 #include "Properties/comboboxproperty.h"
@@ -94,7 +99,6 @@ QPixmap* BoxSingleWidget::C_ICON;
 QPixmap* BoxSingleWidget::G_ICON;
 QPixmap* BoxSingleWidget::CG_ICON;
 QPixmap* BoxSingleWidget::GRAPH_PROPERTY_ICON;
-QPixmap* BoxSingleWidget::PROMOTE_TO_LAYER_ICON;
 
 bool BoxSingleWidget::sStaticPixmapsLoaded = false;
 
@@ -508,13 +512,14 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
     connect(mVisibleButton, &BoxesListActionButton::pressed,
             this, &BoxSingleWidget::switchBoxVisibleAction);
 
-    mSoloButton = new QPushButton(tr("S"), this);
-    mSoloButton->setObjectName(QStringLiteral("AeTimelineSoloButton"));
+    mSoloButton = new QPushButton(this);
+    mSoloButton->setObjectName(QStringLiteral("AeTimelineToggleButton"));
     mSoloButton->setCheckable(true);
     mSoloButton->setFlat(true);
     mSoloButton->setFocusPolicy(Qt::NoFocus);
     mSoloButton->setToolTip(tr("Solo layer"));
-    mSoloButton->setFixedWidth(qRound(eSizesUI::widget * 0.95));
+    mSoloButton->setFixedSize(qRound(eSizesUI::widget * 0.95), qRound(eSizesUI::widget * 0.95));
+    mSoloButton->setIconSize(QSize(qRound(eSizesUI::widget * 0.8), qRound(eSizesUI::widget * 0.8)));
     mSoloButton->hide();
     mMainLayout->addWidget(mSoloButton);
     connect(mSoloButton, &QPushButton::clicked, this, [this]() {
@@ -593,25 +598,137 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
         }
     });
 
-    mPromoteToLayerButton = new PixmapActionButton(this);
-    mPromoteToLayerButton->setToolTip(tr("Promote to Layer"));
-    mPromoteToLayerButton->setPixmapChooser([this]() {
-        const auto targetGroup = getPromoteTargetGroup();
-        if (targetGroup) {
-            return BoxSingleWidget::PROMOTE_TO_LAYER_ICON;
-        }
-        return static_cast<QPixmap*>(nullptr);
-    });
+    mCollapseToggle = new QPushButton(this);
+    mCollapseToggle->setObjectName(QStringLiteral("AeTimelineToggleButton"));
+    mCollapseToggle->setCheckable(true);
+    mCollapseToggle->setFlat(true);
+    mCollapseToggle->setFocusPolicy(Qt::NoFocus);
+    mCollapseToggle->setToolTip(tr("Collapse transformations"));
+    mCollapseToggle->setFixedSize(qRound(eSizesUI::widget * 0.95), qRound(eSizesUI::widget * 0.95));
+    mCollapseToggle->setIconSize(QSize(qRound(eSizesUI::widget * 0.8), qRound(eSizesUI::widget * 0.8)));
+    mCollapseToggle->hide();
+    mMainLayout->addWidget(mCollapseToggle);
 
-    mMainLayout->addWidget(mPromoteToLayerButton);
-    connect(mPromoteToLayerButton, &BoxesListActionButton::pressed,
-            this, [this]() {
-        const auto targetGroup = getPromoteTargetGroup();
-        if (targetGroup) {
-            targetGroup->promoteToLayer();
+    mPromoteDemoteToggle = new QPushButton(this);
+    mPromoteDemoteToggle->setObjectName(QStringLiteral("AeTimelineToggleButton"));
+    mPromoteDemoteToggle->setCheckable(true);
+    mPromoteDemoteToggle->setFlat(true);
+    mPromoteDemoteToggle->setFocusPolicy(Qt::NoFocus);
+    mPromoteDemoteToggle->setToolTip(tr("Promote to Layer / Demote to Group"));
+    mPromoteDemoteToggle->setFixedSize(qRound(eSizesUI::widget * 0.95), qRound(eSizesUI::widget * 0.95));
+    mPromoteDemoteToggle->setIconSize(QSize(qRound(eSizesUI::widget * 0.8), qRound(eSizesUI::widget * 0.8)));
+    mPromoteDemoteToggle->hide();
+    mMainLayout->addWidget(mPromoteDemoteToggle);
+    connect(mPromoteDemoteToggle, &QPushButton::clicked,
+            this, &BoxSingleWidget::togglePromoteDemote);
+
+    mMotionBlurToggle = new QPushButton(this);
+    mMotionBlurToggle->setObjectName(QStringLiteral("AeTimelineToggleButton"));
+    mMotionBlurToggle->setCheckable(true);
+    mMotionBlurToggle->setFlat(true);
+    mMotionBlurToggle->setFocusPolicy(Qt::NoFocus);
+    mMotionBlurToggle->setToolTip(tr("Enable motion blur for this layer"));
+    mMotionBlurToggle->setFixedSize(qRound(eSizesUI::widget * 0.95), qRound(eSizesUI::widget * 0.95));
+    mMotionBlurToggle->setIconSize(QSize(qRound(eSizesUI::widget * 0.8), qRound(eSizesUI::widget * 0.8)));
+    mMotionBlurToggle->hide();
+    mMainLayout->addWidget(mMotionBlurToggle);
+    connect(mMotionBlurToggle, &QPushButton::clicked,
+            this, &BoxSingleWidget::toggleMotionBlur);
+
+    {
+        const int iconSize = qRound(eSizesUI::widget * 0.75);
+        QPixmap soloOn(iconSize, iconSize);
+        QPixmap soloOff(iconSize, iconSize);
+        QPixmap collapseOn(iconSize, iconSize);
+        QPixmap collapseOff(iconSize, iconSize);
+        QPixmap promoteOn(iconSize, iconSize);
+        QPixmap promoteOff(iconSize, iconSize);
+        QPixmap mbOn(iconSize, iconSize);
+        QPixmap mbOff(iconSize, iconSize);
+        soloOn.fill(Qt::transparent); soloOff.fill(Qt::transparent);
+        collapseOn.fill(Qt::transparent); collapseOff.fill(Qt::transparent);
+        promoteOn.fill(Qt::transparent); promoteOff.fill(Qt::transparent);
+        mbOn.fill(Qt::transparent); mbOff.fill(Qt::transparent);
+
+        const qreal m = iconSize / 2.0;
+        const qreal s = iconSize / 16.0;
+        const QColor onColor(80, 140, 255);
+        const QColor offColor(100, 100, 100);
+
+        auto drawSolo = [&](QPixmap &pm, const QColor &c) {
+            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen); p.setBrush(c);
+            p.drawEllipse(QPointF(m, m), m - s * 3, m - s * 3);
+        };
+        auto drawCollapse = [&](QPixmap &pm, const QColor &c) {
+            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(QPen(c, s * 1.5));
+            p.drawEllipse(QPointF(m, m), m - s * 4, m - s * 4);
+            for (int i = 0; i < 4; i++) {
+                const qreal ang = i * M_PI / 2.0 + M_PI / 4.0;
+                const qreal r1 = m - s * 5, r2 = m - s * 1.5;
+                p.drawLine(QPointF(m + cos(ang) * r1, m + sin(ang) * r1),
+                           QPointF(m + cos(ang) * r2, m + sin(ang) * r2));
+            }
+        };
+        auto drawPromote = [&](QPixmap &pm, const QColor &c) {
+            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(QPen(c, s * 1.5));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(QRectF(s * 3, s * 3, iconSize - s * 6, iconSize - s * 6), s, s);
+            p.setPen(Qt::NoPen); p.setBrush(c);
+            p.drawEllipse(QPointF(m, m), s * 2.5, s * 2.5);
+        };
+        auto drawMB = [&](QPixmap &pm, const QColor &c) {
+            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen); p.setBrush(QColor(c.red(), c.green(), c.blue(), 80));
+            p.drawEllipse(QPointF(m - s * 2, m), s * 5, s * 5);
+            p.setBrush(QColor(c.red(), c.green(), c.blue(), 130));
+            p.drawEllipse(QPointF(m + s, m - s), s * 5, s * 5);
+            p.setBrush(c);
+            p.drawEllipse(QPointF(m + s, m + s), s * 5, s * 5);
+        };
+
+        drawSolo(soloOn, onColor);  drawSolo(soloOff, offColor);
+        drawCollapse(collapseOn, onColor); drawCollapse(collapseOff, offColor);
+        drawPromote(promoteOn, onColor); drawPromote(promoteOff, offColor);
+        drawMB(mbOn, onColor); drawMB(mbOff, offColor);
+
+        mSoloButton->setIcon(QIcon(soloOff));
+        mSoloButton->setProperty("iconOn", QVariant::fromValue(QIcon(soloOn)));
+        mSoloButton->setProperty("iconOff", QVariant::fromValue(QIcon(soloOff)));
+        mCollapseToggle->setIcon(QIcon(collapseOff));
+        mCollapseToggle->setProperty("iconOn", QVariant::fromValue(QIcon(collapseOn)));
+        mCollapseToggle->setProperty("iconOff", QVariant::fromValue(QIcon(collapseOff)));
+        mPromoteDemoteToggle->setIcon(QIcon(promoteOff));
+        mPromoteDemoteToggle->setProperty("iconOn", QVariant::fromValue(QIcon(promoteOn)));
+        mPromoteDemoteToggle->setProperty("iconOff", QVariant::fromValue(QIcon(promoteOff)));
+        mMotionBlurToggle->setIcon(QIcon(mbOff));
+        mMotionBlurToggle->setProperty("iconOn", QVariant::fromValue(QIcon(mbOn)));
+        mMotionBlurToggle->setProperty("iconOff", QVariant::fromValue(QIcon(mbOff)));
+
+        connect(mCollapseToggle, &QPushButton::clicked, this, [this]() {
+            if(!mTarget) return;
+            const auto box = enve_cast<BoundingBox*>(mTarget->getTarget());
+            const auto linkCanvas = enve_cast<InternalLinkCanvas*>(box);
+            if(!linkCanvas) return;
+            auto prop = linkCanvas->clipToCanvasProperty();
+            if(prop) prop->setValue(!prop->getValue());
             Document::sInstance->actionFinished();
-        }
-    });
+        });
+
+        auto wireToggle = [this](QPushButton *btn) {
+            connect(btn, &QPushButton::toggled, this, [btn](bool on) {
+                if(on) btn->setIcon(btn->property("iconOn").value<QIcon>());
+                else btn->setIcon(btn->property("iconOff").value<QIcon>());
+            });
+        };
+        wireToggle(mSoloButton);
+        wireToggle(mCollapseToggle);
+        wireToggle(mPromoteDemoteToggle);
+        wireToggle(mMotionBlurToggle);
+    }
+
 
     mValueSlider = new QrealAnimatorValueSlider(nullptr, this);
     mMainLayout->addWidget(mValueSlider, Qt::AlignRight);
@@ -686,27 +803,6 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
                     mParentPickWhipButton->mapToGlobal(mParentPickWhipButton->rect().center()));
     });
 
-    mMattePickWhipButton = new QPushButton(tr("T"), this);
-    mMattePickWhipButton->setObjectName("AeTimelineRelationPickWhip");
-    mMattePickWhipButton->setFlat(true);
-    mMattePickWhipButton->setFocusPolicy(Qt::NoFocus);
-    mMattePickWhipButton->setToolTip(tr("Pick-whip another layer to use as this layer's track matte source."));
-    mMattePickWhipButton->setFixedWidth(qRound(eSizesUI::widget * 1.1));
-    mMainLayout->addWidget(mMattePickWhipButton);
-    mMattePickWhipButton->hide();
-    connect(mMattePickWhipButton, &QPushButton::pressed, this, [this]() {
-        const auto box = mTarget ? enve_cast<BoundingBox*>(mTarget->getTarget()) : nullptr;
-        if (!box || !mParent) return;
-        mParent->beginPickWhip(
-                    box,
-                    BoxScroller::PickWhipMode::matte,
-                    mMattePickWhipButton->mapToGlobal(mMattePickWhipButton->rect().center()));
-    });
-
-    mCollapseCheckbox = new BoolPropertyWidget(this);
-    mCollapseCheckbox->setToolTip(tr("AE-style collapse transformations switch for a nested composition layer."));
-    mMainLayout->addWidget(mCollapseCheckbox);
-
     mParentLayerCombo = createCombo(this);
     mParentLayerCombo->setObjectName("timelineParentCombo");
     mParentLayerCombo->setToolTip(tr("AE-style parent column for the selected layer."));
@@ -742,6 +838,23 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
         }
         Document::sInstance->actionFinished();
         syncTimelineRelationControls();
+    });
+
+    mMattePickWhipButton = new QPushButton(tr("T"), this);
+    mMattePickWhipButton->setObjectName("AeTimelineRelationPickWhip");
+    mMattePickWhipButton->setFlat(true);
+    mMattePickWhipButton->setFocusPolicy(Qt::NoFocus);
+    mMattePickWhipButton->setToolTip(tr("Pick-whip another layer to use as this layer's track matte source."));
+    mMattePickWhipButton->setFixedWidth(qRound(eSizesUI::widget * 1.1));
+    mMainLayout->addWidget(mMattePickWhipButton);
+    mMattePickWhipButton->hide();
+    connect(mMattePickWhipButton, &QPushButton::pressed, this, [this]() {
+        const auto box = mTarget ? enve_cast<BoundingBox*>(mTarget->getTarget()) : nullptr;
+        if (!box || !mParent) return;
+        mParent->beginPickWhip(
+                    box,
+                    BoxScroller::PickWhipMode::matte,
+                    mMattePickWhipButton->mapToGlobal(mMattePickWhipButton->rect().center()));
     });
 
     mTrackMatteCombo = createCombo(this);
@@ -811,16 +924,54 @@ ContainerBox* BoxSingleWidget::getPromoteTargetGroup() {
     const auto target = mTarget->getTarget();
     ContainerBox* targetGroup = nullptr;
     if(const auto box = enve_cast<ContainerBox*>(target)) {
-        if(box->isGroup()) targetGroup = box;
+        targetGroup = box;
     } else if(enve_cast<RasterEffectCollection*>(target) ||
               enve_cast<BlendEffectCollection*>(target)) {
         const auto pTarget = static_cast<Property*>(target);
         const auto parentBox = pTarget->getFirstAncestor<BoundingBox>();
-        if(parentBox && parentBox->isGroup()) {
-            targetGroup = static_cast<ContainerBox*>(parentBox);
+        if(const auto parentContainer = enve_cast<ContainerBox*>(parentBox)) {
+            targetGroup = parentContainer;
         }
     }
     return targetGroup;
+}
+
+void BoxSingleWidget::togglePromoteDemote()
+{
+    const auto targetGroup = getPromoteTargetGroup();
+    if(!targetGroup) return;
+    if(targetGroup->isLayer()) {
+        targetGroup->demoteToGroup();
+    } else if(targetGroup->isGroup()) {
+        targetGroup->promoteToLayer();
+    }
+    Document::sInstance->actionFinished();
+}
+
+void BoxSingleWidget::toggleMotionBlur()
+{
+    if(!mTarget) return;
+    const auto target = mTarget->getTarget();
+    const auto box = enve_cast<BoundingBox*>(target);
+    if(!box) return;
+
+    auto existing = box->ca_getFirstDescendant<MotionBlurEffect>();
+    if(existing) {
+        box->removeRasterEffect(existing->ref<RasterEffect>());
+    } else {
+        box->addRasterEffect(enve::make_shared<MotionBlurEffect>());
+    }
+    Document::sInstance->actionFinished();
+    updateMotionBlurCheckState(box);
+}
+
+void BoxSingleWidget::updateMotionBlurCheckState(BoundingBox *box)
+{
+    if(!box || !mMotionBlurToggle) return;
+    const auto mb = box->ca_getFirstDescendant<MotionBlurEffect>();
+    mMotionBlurToggle->blockSignals(true);
+    mMotionBlurToggle->setChecked(mb != nullptr);
+    mMotionBlurToggle->blockSignals(false);
 }
 
 void BoxSingleWidget::setCompositionMode(const int id) {
@@ -976,7 +1127,7 @@ Property *BoxSingleWidget::targetProperty() const
 bool BoxSingleWidget::isTimelineLayerBackgroundRow() const
 {
     const auto prop = targetProperty();
-    return enve_cast<BoundingBox*>(prop) || enve_cast<eIndependentSound*>(prop);
+    return enve_cast<eBoxOrSound*>(prop);
 }
 
 bool BoxSingleWidget::hasExpandedTimelineContent() const
@@ -1086,7 +1237,6 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
     const auto colorAnimator = enve_cast<ColorAnimator*>(prop);
     const auto pointAnimator = enve_cast<QPointFAnimator*>(prop);
     const auto eboxOrSound = enve_cast<eBoxOrSound*>(prop);
-    const auto eindependentSound = enve_cast<eIndependentSound*>(prop);
     const auto eeffect = enve_cast<eEffect*>(prop);
     const auto rasterEffect = enve_cast<RasterEffect*>(prop);
     const auto boundingBox = enve_cast<BoundingBox*>(prop);
@@ -1104,14 +1254,10 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
             mTargetConn << connect(targetGroup,
                                    &ContainerBox::switchedGroupLayer,
                                    this, [this](const eBoxType type) {
-                mBlendModeCombo->setEnabled(type == eBoxType::layer);
-            });
-        }
-        mPromoteToLayerButton->setVisible(targetGroup);
-        if(targetGroup) {
-            mTargetConn << connect(targetGroup, &ContainerBox::switchedGroupLayer,
-                                   this, [this](const eBoxType type) {
-                mPromoteToLayerButton->setVisible(type == eBoxType::group);
+                mBlendModeCombo->setEnabled(type != eBoxType::group);
+                mPromoteDemoteToggle->blockSignals(true);
+                mPromoteDemoteToggle->setChecked(type != eBoxType::group);
+                mPromoteDemoteToggle->blockSignals(false);
             });
         }
     }
@@ -1128,7 +1274,9 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
     mTimelineCollapseVisible = false;
     mParentPickWhipButton->hide();
     mMattePickWhipButton->hide();
-    mCollapseCheckbox->hide();
+    mCollapseToggle->hide();
+    mPromoteDemoteToggle->hide();
+    mMotionBlurToggle->hide();
     mSoloButton->hide();
     mSelected = false;
 
@@ -1149,16 +1297,34 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
             mBlendModeVisible = true;
             mTimelineParentVisible = true;
             mTimelineMatteVisible = true;
-            if (const auto linkCanvas = enve_cast<InternalLinkCanvas*>(boundingBox)) {
-                mTimelineCollapseVisible = true;
-                mCollapseCheckbox->setTarget(linkCanvas->clipToCanvasProperty());
-                mCollapseCheckbox->setPlaceholderCrossVisible(false);
-            } else {
-                mTimelineCollapseVisible = true;
-                mCollapseCheckbox->setTarget(static_cast<BoolProperty*>(nullptr));
-                mCollapseCheckbox->setPlaceholderCrossVisible(true);
-            }
+            mTimelineCollapseVisible = true;
             mSoloButton->show();
+            mCollapseToggle->show();
+            mPromoteDemoteToggle->show();
+            mMotionBlurToggle->show();
+            {
+                const auto linkCanvas2 = enve_cast<InternalLinkCanvas*>(boundingBox);
+                mCollapseToggle->setEnabled(linkCanvas2 != nullptr);
+                mCollapseToggle->blockSignals(true);
+                if(linkCanvas2) {
+                    auto prop = linkCanvas2->clipToCanvasProperty();
+                    mCollapseToggle->setChecked(prop ? prop->getValue() : false);
+                } else {
+                    mCollapseToggle->setChecked(false);
+                }
+                mCollapseToggle->blockSignals(false);
+            }
+            {
+                const auto tg = getPromoteTargetGroup();
+                mPromoteDemoteToggle->setEnabled(tg != nullptr);
+                mPromoteDemoteToggle->blockSignals(true);
+                mPromoteDemoteToggle->setChecked(tg ? tg->isLayer() : false);
+                mPromoteDemoteToggle->blockSignals(false);
+            }
+            {
+                mMotionBlurToggle->setEnabled(true);
+                updateMotionBlurCheckState(boundingBox);
+            }
             syncTimelineRelationControls();
         } else {
             mBlendModeVisible = true;
@@ -1227,6 +1393,18 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
             overLifeWidgetVisible = true;
         } else {
             mValueSlider->setTarget(qra);
+            { // propagate to matching properties on other selected layers
+                const auto peerAnims = animatorsForSelectedBoxesMatchingPath(qra);
+                QList<QrealAnimator*> peers;
+                for (auto *anim : peerAnims) {
+                    if (anim && anim != qra) {
+                        if (const auto peerQra = enve_cast<QrealAnimator*>(anim)) {
+                            peers.append(peerQra);
+                        }
+                    }
+                }
+                if (!peers.isEmpty()) { mValueSlider->setMultiPeers(peers); }
+            }
             valueSliderVisible = true;
             mValueSlider->setIsLeftSlider(false);
         }
@@ -1259,6 +1437,18 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
                     } else {
                         valueSliderVisible = true;
                         mValueSlider->setTarget(qra);
+                        { // propagate to matching properties on other selected layers
+                            const auto peerAnims = animatorsForSelectedBoxesMatchingPath(qra);
+                            QList<QrealAnimator*> peers;
+                            for (auto *anim : peerAnims) {
+                                if (anim && anim != qra) {
+                                    if (const auto peerQra = enve_cast<QrealAnimator*>(anim)) {
+                                        peers.append(peerQra);
+                                    }
+                                }
+                            }
+                            if (!peers.isEmpty()) { mValueSlider->setMultiPeers(peers); }
+                        }
                         mValueSlider->setIsLeftSlider(false);
                         mSecondValueSlider->setTarget(nullptr);
                     }
@@ -1313,7 +1503,7 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
         mTargetConn << connect(eeffect, &eEffect::effectVisibilityChanged,
                                this, [this]() { mVisibleButton->update(); });
     }
-    if(boundingBox || eindependentSound) {
+    if(eboxOrSound) {
         const auto ptr = static_cast<eBoxOrSound*>(prop);
         mTargetConn << connect(ptr, &eBoxOrSound::visibilityChanged,
                                this, [this]() { mVisibleButton->update(); });
@@ -1322,7 +1512,7 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
         mTargetConn << connect(ptr, &eBoxOrSound::lockedChanged,
                                this, [this]() { mLockedButton->update(); });
     }
-    if(!boundingBox && !eindependentSound) {
+    if(!eboxOrSound) {
         mTargetConn << connect(prop, &Property::prp_selectionChanged,
                                this, qOverload<>(&QWidget::update));
         mTargetConn << connect(prop, &Property::prp_selectionChanged,
@@ -1362,7 +1552,7 @@ void BoxSingleWidget::refreshDisplayName()
                                    0);
     }
     auto font = mNameLabel->font();
-    font.setBold(enve_cast<BoundingBox*>(prop) || enve_cast<eIndependentSound*>(prop));
+    font.setBold(enve_cast<eBoxOrSound*>(prop));
     mNameLabel->setFont(font);
     mNameLabel->setText(QFontMetrics(font).elidedText(
         timelineDisplayNameForProperty(prop),
@@ -1478,7 +1668,6 @@ void BoxSingleWidget::loadStaticPixmaps(int iconSize)
     G_ICON = new QPixmap(QIcon::fromTheme("gpu-active").pixmap(pixmapSize));
     CG_ICON = new QPixmap(QIcon::fromTheme("cpu-gpu").pixmap(pixmapSize));
     GRAPH_PROPERTY_ICON = new QPixmap(QIcon::fromTheme("graph_property_2").pixmap(pixmapSize));
-    PROMOTE_TO_LAYER_ICON = new QPixmap(QIcon::fromTheme("layer").pixmap(pixmapSize));
 
     sStaticPixmapsLoaded = true;
 }
@@ -1500,7 +1689,6 @@ void BoxSingleWidget::clearStaticPixmaps()
     delete ANIMATOR_RECORDING_ICON;
     delete ANIMATOR_NOT_RECORDING_ICON;
     delete ANIMATOR_DESCENDANT_RECORDING_ICON;
-    delete PROMOTE_TO_LAYER_ICON;
     delete C_ICON;
     delete G_ICON;
     delete CG_ICON;
@@ -1553,7 +1741,7 @@ void BoxSingleWidget::mousePressEvent(QMouseEvent *event) {
                 if (!handled && !bbox->isSelected()) {
                     bbox->selectionChangeTriggered(shiftPressed);
                 }
-            } else if(enve_cast<BoundingBox*>(target) || enve_cast<eIndependentSound*>(target)) {
+            } else if(enve_cast<eBoxOrSound*>(target)) {
                 const auto box = static_cast<eBoxOrSound*>(target);
                 if(!box->isSelected()) box->selectionChangeTriggered(shiftPressed);
             } else {
@@ -1662,7 +1850,7 @@ void BoxSingleWidget::mouseReleaseEvent(QMouseEvent *event)
             }
         }
     }
-    if (enve_cast<BoundingBox*>(target) || enve_cast<eIndependentSound*>(target)) {
+    if (enve_cast<eBoxOrSound*>(target)) {
         const auto boxTarget = static_cast<eBoxOrSound*>(target);
         boxTarget->selectionChangeTriggered(shiftPressed);
         Document::sInstance->actionFinished();
@@ -1808,14 +1996,13 @@ void BoxSingleWidget::paintEvent(QPaintEvent *) {
     const bool propertySelected = !bsTarget && prop->prp_isSelected();
     const bool layerSelected = bsTarget && bsTarget->isSelected();
     const bool rowSelected = mSelected || layerSelected || propertySelected;
-    const bool isLayerRow = enve_cast<BoundingBox*>(prop) ||
-                            enve_cast<eIndependentSound*>(prop);
+    const bool isLayerRow = enve_cast<eBoxOrSound*>(prop);
     if (bsTarget && mSoloButton) {
         mSoloButton->setChecked(mParent && mParent->isSolo(bsTarget));
     }
 
     QColor trackAccent = ThemeSupport::getThemeHighlightColor();
-    if (enve_cast<eSoundObjectBase*>(prop) || enve_cast<eIndependentSound*>(prop)) {
+    if (enve_cast<eSound*>(prop)) {
         trackAccent = ThemeSupport::getThemeColorGreen();
     } else if (enve_cast<TextBox*>(prop)) {
         trackAccent = QColor(122, 54, 54);
@@ -1835,6 +2022,18 @@ void BoxSingleWidget::paintEvent(QPaintEvent *) {
     }
     p.fillRect(rect(), rowColor);
 
+    if (bsTarget) {
+        nameX += eSizesUI::widget/4;
+        const bool ss = enve_cast<eSoundObjectBase*>(prop);
+        if (ss || enve_cast<BoundingBox*>(prop)) {
+            p.fillRect(rect(), QColor(0, 0, 0, 35));
+            p.setPen(Qt::white);
+        } else if (enve_cast<BlendEffectBoxShadow*>(prop)) {
+            p.fillRect(rect(), QColor(0, 255, 125, 50));
+            nameX += eSizesUI::widget;
+        }
+    }
+
     if (rowSelected) {
         QColor selectionColor = isLayerRow
                 ? ThemeSupport::getThemeHighlightColor(78)
@@ -1851,52 +2050,43 @@ void BoxSingleWidget::paintEvent(QPaintEvent *) {
     if (mHover) {
         p.fillRect(rect(), ThemeSupport::getThemeHighlightColor(rowSelected ? 18 : 28));
     }
-
-    if (bsTarget) {
-        nameX += eSizesUI::widget/4;
-        const bool ss = enve_cast<eSoundObjectBase*>(prop);
-        if (ss || enve_cast<BoundingBox*>(prop)) {
-            p.fillRect(rect(), QColor(0, 0, 0, 35));
-            p.setPen(Qt::white);
-        } else if (enve_cast<BlendEffectBoxShadow*>(prop)) {
-            p.fillRect(rect(), QColor(0, 255, 125, 50));
-            nameX += eSizesUI::widget;
-        }
-    } else if(!enve_cast<ComplexAnimator*>(prop)) {
-        if(const auto graphAnim = enve_cast<GraphAnimator*>(prop)) {
-            const auto bswvp = static_cast<BoxScroller*>(mParent);
-            const auto keysView = bswvp->getKeysView();
-            if(keysView) {
-                const bool selected = keysView->graphIsSelected(graphAnim);
-                if(selected) {
-                    const int id = keysView->graphGetAnimatorId(graphAnim);
-                    const auto color = id >= 0 ?
-                                keysView->sGetAnimatorColor(id) :
-                                QColor(Qt::black);
-                    const QRect visRect(mVisibleButton->pos(),
-                                        mVisibleButton->size());
-                    const int adj = qRound(4*qreal(mVisibleButton->width())/20);
-                    p.fillRect(visRect.adjusted(adj, adj, -adj, -adj), color);
+    if (!bsTarget) {
+        if(!enve_cast<ComplexAnimator*>(prop)) {
+            if(const auto graphAnim = enve_cast<GraphAnimator*>(prop)) {
+                const auto bswvp = static_cast<BoxScroller*>(mParent);
+                const auto keysView = bswvp->getKeysView();
+                if(keysView) {
+                    const bool selected = keysView->graphIsSelected(graphAnim);
+                    if(selected) {
+                        const int id = keysView->graphGetAnimatorId(graphAnim);
+                        const auto color = id >= 0 ?
+                                    keysView->sGetAnimatorColor(id) :
+                                    QColor(Qt::black);
+                        const QRect visRect(mVisibleButton->pos(),
+                                            mVisibleButton->size());
+                        const int adj = qRound(4*qreal(mVisibleButton->width())/20);
+                        p.fillRect(visRect.adjusted(adj, adj, -adj, -adj), color);
+                    }
                 }
-            }
-            if(const auto path = enve_cast<SmartPathAnimator*>(prop)) {
-                const QRect colRect(QPoint{nameX, 0},
-                                    QSize{eSizesUI::widget, eSizesUI::widget});
-                p.setPen(Qt::NoPen);
-                p.setRenderHint(QPainter::Antialiasing, true);
-                p.setBrush(path->getPathColor());
-                const int radius = qRound(eSizesUI::widget*0.2);
-                p.drawEllipse(colRect.center() + QPoint(0, 2),
-                              radius, radius);
-                p.setRenderHint(QPainter::Antialiasing, false);
-                nameX += eSizesUI::widget;
-            }
-        } else nameX += eSizesUI::widget;
+                if(const auto path = enve_cast<SmartPathAnimator*>(prop)) {
+                    const QRect colRect(QPoint{nameX, 0},
+                                        QSize{eSizesUI::widget, eSizesUI::widget});
+                    p.setPen(Qt::NoPen);
+                    p.setRenderHint(QPainter::Antialiasing, true);
+                    p.setBrush(path->getPathColor());
+                    const int radius = qRound(eSizesUI::widget*0.2);
+                    p.drawEllipse(colRect.center() + QPoint(0, 2),
+                                  radius, radius);
+                    p.setRenderHint(QPainter::Antialiasing, false);
+                    nameX += eSizesUI::widget;
+                }
+            } else nameX += eSizesUI::widget;
 
-        if(!enve_cast<Animator*>(prop)) nameX += eSizesUI::widget;
-        p.setPen(Qt::white);
-    } else {
-        p.setPen(Qt::white);
+            if(!enve_cast<Animator*>(prop)) nameX += eSizesUI::widget;
+            p.setPen(Qt::white);
+        } else {
+            p.setPen(Qt::white);
+        }
     }
 
     if (const auto bbox = enve_cast<BoundingBox*>(prop)) {
@@ -2031,10 +2221,36 @@ void BoxSingleWidget::updateValueSlidersForQPointFAnimator() {
     mPointValueLabel->hide();
     if(mTarget->contentVisible()) return;
     if(width() - mFillWidget->x() > 10*eSizesUI::widget) {
-        mValueSlider->setTarget(asQPointFAnim->getXAnimator());
+        const auto xAnim = asQPointFAnim->getXAnimator();
+        const auto yAnim = asQPointFAnim->getYAnimator();
+        mValueSlider->setTarget(xAnim);
+        { // propagate X to other selected layers
+            const auto peerAnims = animatorsForSelectedBoxesMatchingPath(xAnim);
+            QList<QrealAnimator*> peers;
+            for (auto *anim : peerAnims) {
+                if (anim && anim != xAnim) {
+                    if (const auto peerQra = enve_cast<QrealAnimator*>(anim)) {
+                        peers.append(peerQra);
+                    }
+                }
+            }
+            if (!peers.isEmpty()) { mValueSlider->setMultiPeers(peers); }
+        }
         mValueSlider->show();
         mValueSlider->setIsLeftSlider(true);
-        mSecondValueSlider->setTarget(asQPointFAnim->getYAnimator());
+        mSecondValueSlider->setTarget(yAnim);
+        { // propagate Y to other selected layers
+            const auto peerAnims = animatorsForSelectedBoxesMatchingPath(yAnim);
+            QList<QrealAnimator*> peers;
+            for (auto *anim : peerAnims) {
+                if (anim && anim != yAnim) {
+                    if (const auto peerQra = enve_cast<QrealAnimator*>(anim)) {
+                        peers.append(peerQra);
+                    }
+                }
+            }
+            if (!peers.isEmpty()) { mSecondValueSlider->setMultiPeers(peers); }
+        }
         mSecondValueSlider->show();
         mSecondValueSlider->setIsRightSlider(true);
     } else {
@@ -2084,9 +2300,9 @@ void BoxSingleWidget::updateTimelineRelationCombosVisible() {
         mTrackMatteCombo->hide();
     }
     if (mTimelineCollapseVisible && canShowCollapse) {
-        mCollapseCheckbox->show();
+        mCollapseToggle->show();
     } else {
-        mCollapseCheckbox->hide();
+        mCollapseToggle->hide();
     }
 }
 

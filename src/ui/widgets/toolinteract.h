@@ -30,6 +30,7 @@
 #include "grid.h"
 
 #include <QToolButton>
+#include <QHBoxLayout>
 
 namespace Friction
 {
@@ -42,17 +43,19 @@ namespace Friction
         public:
             explicit ToolInteract(QWidget *parent = nullptr);
 
-        private:
-            void setupGizmoButton();
-            void setupGizmoAction(QToolButton *button,
-                                  const Core::Gizmos::Interact &ti);
-            void setupSnapButton();
-            void setupSnapAction(QToolButton *button,
-                                 const Core::Grid::Option &option);
-            void setupGridButton();
-            void setupGridAction(QToolButton *button,
-                                 const Core::Grid::Option &option);
+            static void addButtonsToLayout(QHBoxLayout *layout,
+                                           QWidget *parentWidget);
 
+        private:
+            static void setupGizmoStatic(QWidget *parentWidget,
+                                         QHBoxLayout *layout,
+                                         QObject *context);
+            static void setupSnapStatic(QWidget *parentWidget,
+                                        QHBoxLayout *layout,
+                                        QObject *context);
+            static void setupGridStatic(QWidget *parentWidget,
+                                        QHBoxLayout *layout,
+                                        QObject *context);
         };
     }
 }

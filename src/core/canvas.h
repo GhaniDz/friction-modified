@@ -248,6 +248,10 @@ public:
     void setCurrentBox(BoundingBox* const box);
     void addBoxToSelection(BoundingBox* const box);
     void removeBoxFromSelection(BoundingBox* const box);
+    void addSoundToSelection(eBoxOrSound* const sound);
+    void removeSoundFromSelection(eBoxOrSound* const sound);
+    void clearSoundsSelection();
+    void removeSelectedSounds();
     void clearBoxesSelection();
     void clearBoxesSelectionList();
     const QString checkForUnsupportedBoxSVG(BoundingBox* const box);

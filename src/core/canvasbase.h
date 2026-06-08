@@ -29,6 +29,8 @@
 #include <QList>
 class Property;
 class BoundingBox;
+class eIndependentSound;
+class eBoxOrSound;
 
 #include "Boxes/containerbox.h"
 #include "MovablePoints/movablepoint.h"
@@ -123,6 +125,7 @@ protected:
 
     ConnContextObjList<BoundingBox*> mSelectedBoxes;
     QPointer<BoundingBox> mLastSelectedBox;
+    ConnContextObjList<eBoxOrSound*> mSelectedSounds;
 
     ConnContextObjList<Property*> mSelectedProps;
 };

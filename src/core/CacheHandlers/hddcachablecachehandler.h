@@ -51,7 +51,8 @@ public:
                              const int startFrame,
                              const int endFrame,
                              const qreal unit = 1,
-                             const int maxX = INT_MAX/2) const;
+                             const int maxX = INT_MAX/2,
+                             const int drawHeight = 4) const;
 
     int firstEmptyFrameAtOrAfter(const int frame) const {
         auto range = mConts.firstEmptyRangeLowerBound(frame);

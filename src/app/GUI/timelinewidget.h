@@ -103,6 +103,8 @@ public:
     void readSettings(ChangeWidthWidget *chww);
     void writeSettings();
 
+    KeysView *getKeysView() const { return mKeysView; }
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -118,6 +120,7 @@ private:
     BoundingBox *createShapeLayer();
     BoundingBox *createTextLayer();
     BoundingBox *createNullLayer();
+    BoundingBox *createAdjustmentLayer();
     void selectOnlyBox(BoundingBox *box);
 
     void setSearchText(const QString &text);

@@ -762,6 +762,21 @@ void RenderHandler::nextPreviewFrame() {
     const auto frameState = previewFrameStateValue();
     timingState.fFrameAccumulator += qMax<qreal>(0.0, elapsedMs)*
             fps*timingState.fPlaybackRate/1000.0;
+    if(timingState.fAudioActive && mAudioHandler.audioOutput()) {
+        const qint64 processedUs = mAudioHandler.getProcessedUSecs();
+        const qreal audioFramesElapsed =
+                processedUs * fps / 1000000.0;
+        const qreal videoTargetFrame =
+                mAudioStartFrame + timingState.fFrameAccumulator +
+                (frameState.fCurrentFrame - mAudioStartFrame);
+        const qreal audioTargetFrame =
+                mAudioStartFrame + audioFramesElapsed;
+        if(videoTargetFrame > audioTargetFrame + 1.5) {
+            timingState.fFrameAccumulator =
+                qMax(0.0, audioFramesElapsed -
+                    (frameState.fCurrentFrame - mAudioStartFrame));
+        }
+    }
     if(timingState.fFrameAccumulator < 1.0) {
         setPreviewTimingState(timingState);
         ensurePreviewWindowQueued(currentPreviewFrameValue() + 1);
@@ -1138,7 +1153,8 @@ void RenderHandler::startAudio() {
         }
     }
     mAudioHandler.startAudio();
-    mCurrentSoundComposition->start(currentPreviewFrameValue());
+    mAudioStartFrame = currentPreviewFrameValue();
+    mCurrentSoundComposition->start(mAudioStartFrame);
     timingState.fAudioActive = true;
     setPreviewTimingState(timingState);
     audioPushTimerExpired();

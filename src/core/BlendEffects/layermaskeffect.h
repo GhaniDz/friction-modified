@@ -68,6 +68,7 @@ public:
     PathBox* maskPathSource() const;
     int modeValue() const;
     bool inverted() const;
+    qreal featherValue(const qreal relFrame) const;
 
     static constexpr int sMaskPathTrackIndex = 1;
 

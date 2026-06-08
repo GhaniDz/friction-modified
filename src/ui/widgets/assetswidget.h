@@ -37,6 +37,9 @@
 #include <QDragMoveEvent>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QLabel>
+#include <QFrame>
+#include <QSplitter>
 
 #include "FileCacheHandlers/filecachehandler.h"
 #include "fileshandler.h"
@@ -83,6 +86,9 @@ public:
 signals:
     void sceneOpenRequested(Canvas *scene);
 
+private slots:
+    void updatePreview(QTreeWidgetItem *current, QTreeWidgetItem *previous);
+
 private:
     void addScene(Canvas *scene);
     void removeScene(Canvas *scene);
@@ -95,6 +101,10 @@ private:
     AssetsTreeWidget *mTree;
     QLineEdit *mSearch = nullptr;
     QPushButton *mNewFolderButton = nullptr;
+    QFrame *mPreviewBar = nullptr;
+    QLabel *mPreviewThumb = nullptr;
+    QLabel *mPreviewName = nullptr;
+    QLabel *mPreviewInfo = nullptr;
     QList<FileCacheHandler*> mCacheList;
 };
 

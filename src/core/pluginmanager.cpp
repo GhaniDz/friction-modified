@@ -47,6 +47,12 @@ const QList<PluginInfo>& pluginInfos() {
          QStringLiteral("3D"),
          QStringLiteral("Sandboxed GLB/glTF layer importer with placeholder preview, transform controls, and animation list metadata."),
          QStringLiteral("GlbViewerPluginEnabled"),
+         true},
+        {PluginFeature::motionV2,
+         QStringLiteral("Motion V2"),
+         QStringLiteral("Animation"),
+         QStringLiteral("Three-slider easing curve adjustment for keyframe animation."),
+         QStringLiteral("MotionV2PluginEnabled"),
          true}
     };
     return kPlugins;

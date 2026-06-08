@@ -234,16 +234,59 @@ void BlendEffectCollection::blendSetup(
 
 void BlendEffectCollection::drawBlendSetup(SkCanvas * const canvas) {
     const qreal relFrame = anim_getCurrentRelFrame();
-    SkPath composedMaskPath;
-    if(composedLayerMaskPath(relFrame, &composedMaskPath)) {
-        if(composedMaskPath.isEmpty()) {
-            canvas->clipRect(SkRect::MakeEmpty(), SkClipOp::kIntersect, true);
-        } else {
-            canvas->clipPath(composedMaskPath, SkClipOp::kIntersect, true);
+
+    qreal maxFeather = 0;
+    const int iMax = ca_getNumberOfChildren();
+    for(int i = 0; i < iMax; i++) {
+        const auto effect = getChild(i);
+        if(!effect->isVisible()) continue;
+        const auto layerMask = enve_cast<LayerMaskEffect*>(effect);
+        if(!layerMask) continue;
+        const qreal fv = layerMask->featherValue(relFrame);
+        if(fv > maxFeather) maxFeather = fv;
+    }
+
+    if(maxFeather > 0.0001) {
+        for(int i = 0; i < iMax; i++) {
+            const auto effect = getChild(i);
+            if(!effect->isVisible()) continue;
+            const auto layerMask = enve_cast<LayerMaskEffect*>(effect);
+            if(!layerMask) continue;
+            const int mode = layerMask->modeValue();
+            if(mode == None) continue;
+            auto path = layerMask->effectivePath(relFrame);
+            if(path.isEmpty()) continue;
+            const qreal fv = layerMask->featherValue(relFrame);
+
+            SkPaint maskPaint;
+            maskPaint.setAntiAlias(true);
+            if(fv > 0.0001) {
+                maskPaint.setMaskFilter(
+                    SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, fv / 2.0));
+            }
+
+            SkPaint layerPaint;
+            if(layerMask->inverted()) {
+                layerPaint.setBlendMode(SkBlendMode::kDstOut);
+            } else {
+                layerPaint.setBlendMode(SkBlendMode::kDstIn);
+            }
+
+            canvas->saveLayer(nullptr, &layerPaint);
+            canvas->drawPath(path, maskPaint);
+            canvas->restore();
+        }
+    } else {
+        SkPath composedMaskPath;
+        if(composedLayerMaskPath(relFrame, &composedMaskPath)) {
+            if(composedMaskPath.isEmpty()) {
+                canvas->clipRect(SkRect::MakeEmpty(), SkClipOp::kIntersect, true);
+            } else {
+                canvas->clipPath(composedMaskPath, SkClipOp::kIntersect, true);
+            }
         }
     }
 
-    const int iMax = ca_getNumberOfChildren();
     for(int i = 0; i < iMax; i++) {
         const auto effect = getChild(i);
         if(!effect->isVisible()) continue;

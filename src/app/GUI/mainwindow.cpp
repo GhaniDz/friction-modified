@@ -99,6 +99,7 @@
 #include "widgets/assetswidget.h"
 #include "dialogs/adjustscenedialog.h"
 #include "dialogs/commandpalette.h"
+#include "GUI/motionv2dialog.h"
 
 using namespace Friction;
 
@@ -858,7 +859,6 @@ void MainWindow::setupToolBar()
 
     mCanvasToolBar = new Ui::CanvasToolBar(this);
 
-    mCanvasToolBar->addSeparator();
     mCanvasToolBar->addAction(QIcon::fromTheme("workspace"),
                               tr("Layout"));
     const auto workspaceLayoutCombo = mLayoutHandler->comboWidget();
@@ -1625,6 +1625,8 @@ void MainWindow::setupPropertiesWidgets()
     alignLayout->addWidget(mAlignWidget, 0, Qt::AlignTop);
     alignLayout->addStretch();
 
+    mMotionV2Panel = new MotionV2Dialog(this);
+
     mBottomTabs = new QTabWidget(this);
     mBottomTabs->setObjectName("AePanelTabs");
     mBottomTabs->setDocumentMode(true);
@@ -1881,6 +1883,7 @@ void MainWindow::syncPanelsMenuState()
     setCheckedFromDock(mPanelEffectsAct, tr("Effect Presets"), mEffectsPresetsPanel);
     setCheckedFromDock(mPanelCharacterAct, tr("Character"), mCharacterPanel);
     setCheckedFromDock(mPanelAlignAct, tr("Align"), mAlignPanel);
+    setCheckedFromDock(mPanelMotionV2Act, tr("Motion V2"), mMotionV2Panel);
 }
 
 void MainWindow::updateWorkspaceTabTitles()
@@ -2122,6 +2125,13 @@ void MainWindow::setupLayout()
                      -1,
                      tr("Align"),
                      mAlignPanel,
+                     true,
+                     true,
+                     false});
+    docks.push_back({UIDock::Position::Right,
+                     -1,
+                     tr("Motion V2"),
+                     mMotionV2Panel,
                      true,
                      true,
                      false});

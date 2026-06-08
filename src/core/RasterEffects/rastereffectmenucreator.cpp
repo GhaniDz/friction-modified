@@ -51,6 +51,7 @@ void RasterEffectMenuCreator::forEveryEffectCore(const EffectAdder &add)
     add("Corner Pin", "Distort", []() { return enve::make_shared<CornerPinEffect>(); });
     add("Motion Tile", "Distort", []() { return enve::make_shared<MotionTileEffect>(); });
     add("Puppet", "Distort", []() { return enve::make_shared<PuppetEffect>(); });
+    add("Mirror", "Distort", []() { return enve::make_shared<MirrorEffect>(); });
     add("Wipe", "Transitions", []() { return enve::make_shared<WipeEffect>(); });
     add("Blinds", "Transitions", []() { return enve::make_shared<BlindsEffect>(); });
     add("Noise Fade", "Transitions", []() { return enve::make_shared<NoiseFadeEffect>(); });

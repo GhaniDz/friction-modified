@@ -89,38 +89,35 @@ void BoxScrollWidget::toggleSolo(eBoxOrSound *target)
         return;
     }
 
-    auto restoreSolo = [this]() {
-        for (const auto &entry : mSoloVisibility) {
-            if (entry.first) {
-                entry.first->setVisible(entry.second);
+    if (mSoloTargets.contains(target)) {
+        mSoloTargets.remove(target);
+        if (mSoloTargets.isEmpty()) {
+            for (const auto &entry : mSoloVisibility) {
+                if (entry.first) {
+                    entry.first->setVisible(entry.second);
+                }
             }
+            mSoloVisibility.clear();
         }
-        mSoloVisibility.clear();
-        mSoloTarget = nullptr;
-    };
-
-    if (mSoloTarget == target) {
-        restoreSolo();
         Document::sInstance->actionFinished();
         return;
     }
 
-    if (mSoloTarget) {
-        restoreSolo();
+    if (mSoloTargets.isEmpty()) {
+        for (auto *box : scene->getContainedBoxes()) {
+            if (!box) { continue; }
+            mSoloVisibility[box] = box->isVisible();
+            box->setVisible(false);
+        }
     }
-
-    for (auto *box : scene->getContainedBoxes()) {
-        if (!box) { continue; }
-        mSoloVisibility[box] = box->isVisible();
-        box->setVisible(box == target);
-    }
-    mSoloTarget = target;
+    mSoloTargets.insert(target);
+    target->setVisible(true);
     Document::sInstance->actionFinished();
 }
 
 bool BoxScrollWidget::isSolo(const eBoxOrSound *target) const
 {
-    return target && mSoloTarget == target;
+    return target && mSoloTargets.contains(const_cast<eBoxOrSound*>(target));
 }
 
 void BoxScrollWidget::applyAeRevealPreset(const AeRevealPreset preset)

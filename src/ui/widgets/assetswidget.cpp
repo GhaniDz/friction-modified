@@ -39,6 +39,7 @@
 #include <QDataStream>
 #include <QHBoxLayout>
 #include <QUuid>
+#include <QTimer>
 
 #include "appsupport.h"
 #include "Private/document.h"
@@ -48,6 +49,10 @@
 #include "FileCacheHandlers/imagesequencecachehandler.h"
 #include "filesourcescache.h"
 #include "themesupport.h"
+#include "Animators/transformanimator.h"
+#include "CacheHandlers/soundcachehandler.h"
+#include "FileCacheHandlers/svgfilecachehandler.h"
+#include "FileCacheHandlers/animationcachehandler.h"
 
 #include "GUI/global.h"
 
@@ -627,6 +632,35 @@ AssetsWidget::AssetsWidget(QWidget *parent)
     mLayout->setMargin(0);
     mLayout->setSpacing(4);
 
+    mPreviewBar = new QFrame(this);
+    mPreviewBar->setFrameShape(QFrame::StyledPanel);
+    mPreviewBar->setFixedHeight(64);
+    mPreviewBar->setVisible(false);
+    auto *previewLayout = new QHBoxLayout(mPreviewBar);
+    previewLayout->setContentsMargins(6, 4, 6, 4);
+    previewLayout->setSpacing(8);
+
+    mPreviewThumb = new QLabel();
+    mPreviewThumb->setFixedSize(48, 48);
+    mPreviewThumb->setAlignment(Qt::AlignCenter);
+    previewLayout->addWidget(mPreviewThumb);
+
+    auto *previewTextLayout = new QVBoxLayout();
+    previewTextLayout->setSpacing(2);
+    mPreviewName = new QLabel();
+    QFont boldFont = mPreviewName->font();
+    boldFont.setBold(true);
+    mPreviewName->setFont(boldFont);
+    mPreviewName->setWordWrap(true);
+    previewTextLayout->addWidget(mPreviewName);
+
+    mPreviewInfo = new QLabel();
+    mPreviewInfo->setWordWrap(true);
+    previewTextLayout->addWidget(mPreviewInfo);
+
+    previewLayout->addLayout(previewTextLayout, 1);
+    mLayout->addWidget(mPreviewBar);
+
     auto *topRow = new QHBoxLayout();
     topRow->setContentsMargins(0, 0, 0, 0);
     topRow->setSpacing(4);
@@ -653,6 +687,8 @@ AssetsWidget::AssetsWidget(QWidget *parent)
 
     connect(mTree, &QTreeWidget::customContextMenuRequested,
             this, &AssetsWidget::showContextMenu);
+    connect(mTree, &QTreeWidget::currentItemChanged,
+            this, &AssetsWidget::updatePreview);
     connect(mTree, &QTreeWidget::itemDoubleClicked,
             this, [this](QTreeWidgetItem *item, int) {
         if (!item) { return; }
@@ -682,6 +718,61 @@ AssetsWidget::AssetsWidget(QWidget *parent)
 // Forward declarations
 static QTreeWidgetItem *ensureFootageFolder(QTreeWidget *tree);
 static QTreeWidgetItem *ensureCompositionsFolder(QTreeWidget *tree);
+
+void AssetsWidget::updatePreview(QTreeWidgetItem *current, QTreeWidgetItem *previous)
+{
+    Q_UNUSED(previous)
+    if (!current) {
+        mPreviewBar->setVisible(false);
+        return;
+    }
+
+    mPreviewBar->setVisible(true);
+    const QString name = current->text(0);
+    mPreviewName->setText(name);
+
+    QStringList infoParts;
+    const QString type = current->text(1);
+    const QString size = current->text(2);
+    if (!type.isEmpty()) infoParts << type;
+    if (!size.isEmpty()) infoParts << size;
+
+    const auto assetItem = dynamic_cast<AssetsWidgetItem*>(current);
+    if (assetItem && assetItem->getCache()) {
+        auto *cache = assetItem->getCache();
+        const auto imgSeqHandler = dynamic_cast<ImageSequenceFileHandler*>(cache);
+        if (imgSeqHandler) infoParts << tr("Image Sequence");
+        const auto svgHandler = dynamic_cast<SvgFileCacheHandler*>(cache);
+        if (svgHandler) infoParts << tr("Vector Graphic");
+        const auto soundHandler = dynamic_cast<SoundFileHandler*>(cache);
+        if (soundHandler) infoParts << tr("Audio");
+    }
+
+    const quintptr scenePtr = current->data(0, kScenePointerRole).value<quintptr>();
+    if (scenePtr != 0) {
+        auto *scene = reinterpret_cast<Canvas*>(scenePtr);
+        if (scene) {
+            const int w = scene->getCanvasWidth();
+            const int h = scene->getCanvasHeight();
+            if (w > 0) infoParts << QStringLiteral("%1 × %2 px").arg(w).arg(h);
+        }
+    }
+
+    const QString folderType = current->data(0, kProjectFolderTypeRole).toString();
+    if (!folderType.isEmpty()) {
+        const int childCount = current->childCount();
+        if (childCount > 0) infoParts << tr("%n item(s)", nullptr, childCount);
+    }
+
+    mPreviewInfo->setText(infoParts.join(QStringLiteral("  ·  ")));
+
+    const QIcon icon = current->icon(0);
+    if (!icon.isNull()) {
+        mPreviewThumb->setPixmap(icon.pixmap(48, 48));
+    } else {
+        mPreviewThumb->clear();
+    }
+}
 
 void AssetsWidget::addScene(Canvas *scene)
 {
@@ -856,6 +947,10 @@ void AssetsWidget::showContextMenu(const QPoint &pos)
                                                   : isOraGroup ? tr("Remove Package from Project")
                                                   : isManualFolder ? tr("Delete Folder")
                                                                    : tr("Remove from Project"));
+    } else {
+        menu.addSeparator();
+        removeAction = menu.addAction(QIcon::fromTheme(QStringLiteral("edit-clear")),
+                                      tr("Clear Folder"));
     }
 
     const auto selectedAct = menu.exec(mTree->mapToGlobal(pos));
@@ -939,19 +1034,21 @@ void AssetsWidget::removeItemFromProject(QTreeWidgetItem *item)
     const QString folderId = item->data(0, kProjectFolderIdRole).toString();
     const QString folderType = item->data(0, kProjectFolderTypeRole).toString();
     if (!folderId.isEmpty()) {
-        if (folderType == projectFolderTypeManual()) {
-            if (auto *parent = item->parent()) {
-                parent->removeChild(item);
-                delete item;
-            } else {
-                delete mTree->takeTopLevelItem(mTree->indexOfTopLevelItem(item));
-            }
-            return;
-        }
-
         QList<qsptr<Canvas>> scenesToRemove;
         QList<FileCacheHandler*> cachesToDetach;
         collectProjectItemContents(item, scenesToRemove, cachesToDetach);
+
+        while (item->childCount() > 0) {
+            delete item->takeChild(0);
+        }
+        QTreeWidgetItem *parentItem = item->parent();
+        if (parentItem) {
+            parentItem->takeChild(parentItem->indexOfChild(item));
+        } else {
+            const int index = mTree->indexOfTopLevelItem(item);
+            if (index >= 0) mTree->takeTopLevelItem(index);
+        }
+        delete item;
 
         if (FilesHandler::sInstance) {
             for (auto *cache : cachesToDetach) {
@@ -961,12 +1058,6 @@ void AssetsWidget::removeItemFromProject(QTreeWidgetItem *item)
         if (Document::sInstance) {
             for (const auto &scene : scenesToRemove) {
                 Document::sInstance->removeScene(scene);
-            }
-        }
-        if (item->childCount() == 0) {
-            const int index = mTree->indexOfTopLevelItem(item);
-            if (index >= 0) {
-                delete mTree->takeTopLevelItem(index);
             }
         }
         return;

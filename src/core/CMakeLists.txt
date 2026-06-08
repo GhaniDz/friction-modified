@@ -56,6 +56,7 @@ set(
     appsupport.cpp
     grid.cpp
     Boxes/nullobject.cpp
+    Boxes/adjustmentlayerbox.cpp
     Expressions/expression.cpp
     Expressions/expressionpresets.cpp
     Expressions/framebinding.cpp
@@ -218,6 +219,7 @@ set(
     RasterEffects/customrastereffect.cpp
     RasterEffects/displacementmapeffect.cpp
     RasterEffects/motiontileeffect.cpp
+    RasterEffects/mirroreffect.cpp
     RasterEffects/motionblureffect.cpp
     RasterEffects/noisefadeeffect.cpp
     RasterEffects/openglrastereffectcaller.cpp
@@ -386,6 +388,7 @@ set(
     appsupport.h
     grid.h
     Boxes/nullobject.h
+    Boxes/adjustmentlayerbox.h
     Expressions/expression.h
     Expressions/expressionpresets.h
     Expressions/framebinding.h
@@ -544,6 +547,7 @@ set(
     RasterEffects/cornerpineffect.h
     RasterEffects/customrastereffect.h
     RasterEffects/displacementmapeffect.h
+    RasterEffects/mirroreffect.h
     RasterEffects/motionblureffect.h
     RasterEffects/noisefadeeffect.h
     RasterEffects/openglrastereffectcaller.h

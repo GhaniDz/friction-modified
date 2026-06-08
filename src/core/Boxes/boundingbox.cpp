@@ -111,6 +111,22 @@ BoundingBox::BoundingBox(const QString& name, const eBoxType type) :
     });
     connect(mBlendEffectCollection.get(), &Property::prp_currentFrameChanged,
             this, &BoundingBox::blendEffectChanged);
+
+    switch(type) {
+    case eBoxType::video:       mTimelineColor = QColor(0xE8, 0x61, 0xA0); break;
+    case eBoxType::image:       mTimelineColor = QColor(0xE8, 0x90, 0x3E); break;
+    case eBoxType::imageSequence: mTimelineColor = QColor(0xE8, 0x90, 0x3E); break;
+    case eBoxType::circle:      mTimelineColor = QColor(0x4D, 0xC8, 0xE0); break;
+    case eBoxType::rectangle:   mTimelineColor = QColor(0x4D, 0xC8, 0xE0); break;
+    case eBoxType::polygon:     mTimelineColor = QColor(0x4D, 0xC8, 0xE0); break;
+    case eBoxType::text:        mTimelineColor = QColor(0x4D, 0x8C, 0xE0); break;
+    case eBoxType::paint:       mTimelineColor = QColor(0x5B, 0xBA, 0x6F); break;
+    case eBoxType::nullObject:  mTimelineColor = QColor(0xE0, 0xD0, 0x40); break;
+    case eBoxType::adjustmentLayer: mTimelineColor = QColor(0xD0, 0xD0, 0xD0); break;
+    case eBoxType::layer:       mTimelineColor = QColor(0xC0, 0x90, 0xE0); break;
+    case eBoxType::glb:         mTimelineColor = QColor(0xE8, 0x61, 0xA0); break;
+    default: break;
+    }
 }
 
 BoundingBox::~BoundingBox() {

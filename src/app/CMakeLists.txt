@@ -228,6 +228,7 @@ set(
     GUI/extraactions.cpp
     GUI/effectactions.cpp
     GUI/menu.cpp
+    GUI/motionv2dialog.cpp
 )
 
 set(
@@ -279,6 +280,7 @@ set(
     GUI/keysview.h
     GUI/mainwindow.h
     GUI/window.h
+    GUI/motionv2dialog.h
 )
 
 set(
@@ -335,6 +337,7 @@ target_link_directories(
     ${QSCINTILLA_LIBRARIES_DIRS}
     #${QUAZIP_LIBRARIES_DIRS}
     ${SKIA_LIBRARIES_DIRS}
+    ${GPERF_LIBRARIES_DIRS}
 )
 
 if(${SKIA_USE_SYSTEM_LIBS} AND UNIX)

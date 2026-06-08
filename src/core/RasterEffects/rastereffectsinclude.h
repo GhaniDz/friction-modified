@@ -10,6 +10,7 @@
 #include "noisefadeeffect.h"
 #include "colorizeeffect.h"
 #include "brightnesscontrasteffect.h"
+#include "mirroreffect.h"
 #include "deepgloweffect.h"
 #include "displacementmapeffect.h"
 #include "cornerpineffect.h"

@@ -13,7 +13,8 @@ enum class PluginFeature {
     webmAlphaPolicy,
     particleSystem,
     deepGlow,
-    glbViewer
+    glbViewer,
+    motionV2
 };
 
 struct CORE_EXPORT PluginInfo {

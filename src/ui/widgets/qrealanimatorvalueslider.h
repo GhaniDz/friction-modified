@@ -28,6 +28,7 @@
 
 #include "ui_global.h"
 
+#include <QList>
 #include "widgets/qdoubleslider.h"
 #include "Animators/qrealanimator.h"
 #include "smartPointers/selfref.h"
@@ -61,6 +62,7 @@ public:
     QrealAnimatorValueSlider(QWidget *parent = nullptr);
 
     void setTarget(QrealAnimator * const animator);
+    void setMultiPeers(const QList<QrealAnimator*>& peers);
     bool hasTarget();
     bool isTargetDisabled();
 
@@ -93,6 +95,7 @@ private:
     QMetaObject::Connection mExprConn;
     ConnContextQPtr<QrealAnimator> mTarget;
     qptr<QrealAnimator> mTransformTarget;
+    QList<QrealAnimator*> mMultiPeers;
     qreal mBaseValue;
 
     bool mUniform = false;

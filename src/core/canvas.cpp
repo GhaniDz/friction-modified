@@ -35,6 +35,7 @@
 #include "MovablePoints/pathpivot.h"
 #include "Boxes/imagebox.h"
 #include "Sound/soundcomposition.h"
+#include "Sound/eindependentsound.h"
 #include "Boxes/textbox.h"
 #include "GUI/global.h"
 #include "appsupport.h"
@@ -1288,6 +1289,7 @@ void Canvas::deleteAction()
     case CanvasMode::drawPath:
     case CanvasMode::pathCreate:
         removeSelectedBoxesAndClearList();
+        removeSelectedSounds();
         break;
     default:;
     }
@@ -1317,7 +1319,44 @@ void Canvas::cutAction()
 
 void Canvas::splitAction()
 {
-    if (mSelectedBoxes.isEmpty() || mSelectedBoxes.count() > 1) { return; }
+    const bool hasBoxes = !mSelectedBoxes.isEmpty();
+    const bool hasSounds = !mSelectedSounds.isEmpty();
+
+    if (!hasBoxes && !hasSounds) { return; }
+    if (hasBoxes && hasSounds) { return; }
+
+    if (hasSounds) {
+        if (mSelectedSounds.count() > 1) { return; }
+        const auto snd = mSelectedSounds.getList().at(0);
+        if (!snd) { return; }
+        const auto esnd = enve_cast<eSound*>(snd);
+        if (!esnd) { return; }
+        const auto dRect = snd->getDurationRectangle();
+        if (!dRect) { return; }
+        const auto frame = getCurrentFrame();
+        const auto values = dRect->getValues();
+        const auto range = dRect->getAbsFrameRange();
+        if (!range.inRange(frame)) { return; }
+        int offset = values.fMax - (range.fMax - frame);
+        qsptr<eSound> link = esnd->createLink();
+        if (!link) { return; }
+        qsptr<eBoxOrSound> linkEbos = link;
+        mCurrentContainer->addContained(linkEbos);
+        const auto cRect = linkEbos->getDurationRectangle();
+        if (!cRect) { return; }
+        dRect->setValues({values.fShift, offset, values.fMax});
+        cRect->setValues({values.fShift, values.fMin, offset});
+        for (int i = linkEbos->getZIndex(); i < snd->getZIndex(); i = linkEbos->getZIndex()) {
+            linkEbos->moveDown();
+        }
+        clearSoundsSelection();
+        addSoundToSelection(snd);
+        addSoundToSelection(linkEbos.get());
+        mDocument.actionFinished();
+        return;
+    }
+
+    if (mSelectedBoxes.count() > 1) { return; }
 
     const auto bBox = enve_cast<BoundingBox*>(mSelectedBoxes.getList().at(0));
     if (!bBox) { return; }
@@ -1344,6 +1383,10 @@ void Canvas::splitAction()
         }
     }
     if (!box) { return; }
+
+    if (bBox->hasTimelineColor()) {
+        box->setTimelineColor(bBox->getTimelineColor());
+    }
 
     const auto cRect = box->getDurationRectangle();
     if (!cRect) { return; }
@@ -1613,12 +1656,18 @@ void Canvas::startDurationRectPosTransformForAllSelected()
     for (const auto &box : mSelectedBoxes) {
         box->startDurationRectPosTransform();
     }
+    for (const auto &snd : mSelectedSounds) {
+        snd->startDurationRectPosTransform();
+    }
 }
 
 void Canvas::finishDurationRectPosTransformForAllSelected()
 {
     for (const auto &box : mSelectedBoxes) {
         box->finishDurationRectPosTransform();
+    }
+    for (const auto &snd : mSelectedSounds) {
+        snd->finishDurationRectPosTransform();
     }
 }
 
@@ -1627,12 +1676,18 @@ void Canvas::cancelDurationRectPosTransformForAllSelected()
     for (const auto &box : mSelectedBoxes) {
         box->cancelDurationRectPosTransform();
     }
+    for (const auto &snd : mSelectedSounds) {
+        snd->cancelDurationRectPosTransform();
+    }
 }
 
 void Canvas::moveDurationRectForAllSelected(const int dFrame)
 {
     for (const auto& box : mSelectedBoxes) {
         box->moveDurationRect(dFrame);
+    }
+    for (const auto& snd : mSelectedSounds) {
+        snd->moveDurationRect(dFrame);
     }
 }
 
@@ -1641,12 +1696,18 @@ void Canvas::startMinFramePosTransformForAllSelected()
     for (const auto& box : mSelectedBoxes) {
         box->startMinFramePosTransform();
     }
+    for (const auto& snd : mSelectedSounds) {
+        snd->startMinFramePosTransform();
+    }
 }
 
 void Canvas::finishMinFramePosTransformForAllSelected()
 {
     for (const auto& box : mSelectedBoxes) {
         box->finishMinFramePosTransform();
+    }
+    for (const auto& snd : mSelectedSounds) {
+        snd->finishMinFramePosTransform();
     }
 }
 
@@ -1655,12 +1716,18 @@ void Canvas::cancelMinFramePosTransformForAllSelected()
     for (const auto& box : mSelectedBoxes) {
         box->cancelMinFramePosTransform();
     }
+    for (const auto& snd : mSelectedSounds) {
+        snd->cancelMinFramePosTransform();
+    }
 }
 
 void Canvas::moveMinFrameForAllSelected(const int dFrame)
 {
     for (const auto& box : mSelectedBoxes) {
         box->moveMinFrame(dFrame);
+    }
+    for (const auto& snd : mSelectedSounds) {
+        snd->moveMinFrame(dFrame);
     }
 }
 
@@ -1669,12 +1736,18 @@ void Canvas::startMaxFramePosTransformForAllSelected()
     for (const auto& box : mSelectedBoxes) {
         box->startMaxFramePosTransform();
     }
+    for (const auto& snd : mSelectedSounds) {
+        snd->startMaxFramePosTransform();
+    }
 }
 
 void Canvas::finishMaxFramePosTransformForAllSelected()
 {
     for (const auto& box : mSelectedBoxes) {
         box->finishMaxFramePosTransform();
+    }
+    for (const auto& snd : mSelectedSounds) {
+        snd->finishMaxFramePosTransform();
     }
 }
 
@@ -1684,12 +1757,18 @@ void Canvas::cancelMaxFramePosTransformForAllSelected()
     for (const auto& box : mSelectedBoxes) {
         box->cancelMaxFramePosTransform();
     }
+    for (const auto& snd : mSelectedSounds) {
+        snd->cancelMaxFramePosTransform();
+    }
 }
 
 void Canvas::moveMaxFrameForAllSelected(const int dFrame)
 {
     for (const auto& box : mSelectedBoxes) {
         box->moveMaxFrame(dFrame);
+    }
+    for (const auto& snd : mSelectedSounds) {
+        snd->moveMaxFrame(dFrame);
     }
 }
 

@@ -172,6 +172,9 @@ void QrealAnimatorValueSlider::startTransform(const qreal value)
         if (other) {
             other->prp_startTransform();
         }
+        for (auto *peer : mMultiPeers) {
+            if (peer) { peer->prp_startTransform(); }
+        }
     }
     QDoubleSlider::startTransform(value);
 }
@@ -188,6 +191,9 @@ void QrealAnimatorValueSlider::setValue(const qreal value)
 {
     if (mTransformTarget) {
         mTransformTarget->setCurrentBaseValue(value);
+        for (auto *peer : mMultiPeers) {
+            if (peer) { peer->setCurrentBaseValue(value); }
+        }
         emit valueEdited(this->value());
     } else  { QDoubleSlider::setValue(value); }
 }
@@ -205,6 +211,9 @@ void QrealAnimatorValueSlider::finishTransform(const qreal value)
             }
             other->prp_finishTransform();
         }
+        for (auto *peer : mMultiPeers) {
+            if (peer) { peer->prp_finishTransform(); }
+        }
         mTransformTarget = nullptr;
     }
     QDoubleSlider::finishTransform(value);
@@ -217,6 +226,9 @@ void QrealAnimatorValueSlider::cancelTransform()
         const auto other = getTransformTargetSibling();
         if (other) {
             other->prp_cancelTransform();
+        }
+        for (auto *peer : mMultiPeers) {
+            if (peer) { peer->prp_cancelTransform(); }
         }
         mTransformTarget = nullptr;
     }
@@ -315,9 +327,15 @@ void QrealAnimatorValueSlider::targetHasExpressionChanged()
     } else { setNameVisible(false); }
 }
 
+void QrealAnimatorValueSlider::setMultiPeers(const QList<QrealAnimator*>& peers)
+{
+    mMultiPeers = peers;
+}
+
 void QrealAnimatorValueSlider::setTarget(QrealAnimator * const animator)
 {
     if (animator == mTarget) { return; }
+    mMultiPeers.clear();
     auto& conn = mTarget.assign(animator);
     targetHasExpressionChanged();
     if (animator) {

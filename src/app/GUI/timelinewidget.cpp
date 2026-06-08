@@ -60,6 +60,7 @@
 #include "Boxes/rectangle.h"
 #include "Boxes/textbox.h"
 #include "Boxes/nullobject.h"
+#include "Boxes/adjustmentlayerbox.h"
 #include "Boxes/containerbox.h"
 #include "paintsettings.h"
 
@@ -718,6 +719,22 @@ BoundingBox *TimelineWidget::createNullLayer()
     return nullObject.get();
 }
 
+BoundingBox *TimelineWidget::createAdjustmentLayer()
+{
+    if (!mCurrentScene) { return nullptr; }
+    activateSceneWorkspace(mDocument, mCurrentScene);
+    auto *group = mCurrentScene->getCurrentGroup();
+    if (!group) { group = mCurrentScene; }
+
+    const auto adjLayer = enve::make_shared<AdjustmentLayerBox>();
+    adjLayer->prp_setName(tr("Adjustment Layer (Experimental)"));
+    group->addContained(adjLayer);
+    adjLayer->setAbsolutePos(QPointF(mCurrentScene->getCanvasWidth()/2.0,
+                                      mCurrentScene->getCanvasHeight()/2.0));
+    adjLayer->planCenterPivotPosition();
+    return adjLayer.get();
+}
+
 void TimelineWidget::showAeTimelineContextMenu(const QPoint &globalPos)
 {
     enum class PendingAction {
@@ -726,6 +743,7 @@ void TimelineWidget::showAeTimelineContextMenu(const QPoint &globalPos)
         NewShape,
         NewText,
         NewNull,
+        NewAdjustment,
         CompositionSettings
     };
 
@@ -735,6 +753,7 @@ void TimelineWidget::showAeTimelineContextMenu(const QPoint &globalPos)
     auto *shapeAct = newMenu->addAction(QIcon::fromTheme("shape-rectangle"), tr("New Shape Layer"));
     auto *textAct = newMenu->addAction(QIcon::fromTheme("draw-text"), tr("New Text Layer"));
     auto *nullAct = newMenu->addAction(QIcon::fromTheme("crosshairs"), tr("New Null Object"));
+    auto *adjustmentAct = newMenu->addAction(QIcon::fromTheme("layer"), tr("New Adjustment Layer (Experimental)"));
 
     menu.addSeparator();
     auto *compSettingsAct = menu.addAction(QIcon::fromTheme("sequence"),
@@ -752,6 +771,8 @@ void TimelineWidget::showAeTimelineContextMenu(const QPoint &globalPos)
         pendingAction = PendingAction::NewText;
     } else if (selectedAction == nullAct) {
         pendingAction = PendingAction::NewNull;
+    } else if (selectedAction == adjustmentAct) {
+        pendingAction = PendingAction::NewAdjustment;
     } else if (selectedAction == compSettingsAct) {
         pendingAction = PendingAction::CompositionSettings;
     }
@@ -775,6 +796,9 @@ void TimelineWidget::showAeTimelineContextMenu(const QPoint &globalPos)
             break;
         case PendingAction::NewNull:
             createdBox = that->createNullLayer();
+            break;
+        case PendingAction::NewAdjustment:
+            createdBox = that->createAdjustmentLayer();
             break;
         case PendingAction::CompositionSettings:
             if (scene) {

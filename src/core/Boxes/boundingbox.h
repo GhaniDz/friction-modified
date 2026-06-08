@@ -96,6 +96,7 @@ enum class eBoxType {
     deprecated0, // sculptPath,
     nullObject,
     glb,
+    adjustmentLayer,
 
     count
 };

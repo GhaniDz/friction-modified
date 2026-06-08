@@ -316,6 +316,7 @@ private:
     QWidget *mEffectsPresetsPanel = nullptr;
     QWidget *mCharacterPanel = nullptr;
     QWidget *mAlignPanel = nullptr;
+    QWidget *mMotionV2Panel = nullptr;
     QTabWidget *mCenterTabs;
     QTabWidget *mBottomTabs;
     QHash<Canvas*, QWidget*> mBottomSceneTabs;
@@ -407,6 +408,7 @@ private:
     QAction *mPanelEffectsAct = nullptr;
     QAction *mPanelCharacterAct = nullptr;
     QAction *mPanelAlignAct = nullptr;
+    QAction *mPanelMotionV2Act = nullptr;
 
     intMB mMemoryUsed;
 

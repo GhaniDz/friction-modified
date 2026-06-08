@@ -45,7 +45,8 @@ enum class RasterEffectType : short {
     BLINDS,
     MOTION_TILE,
     DEEP_GLOW,
-    PARTICLE_SYSTEM
+    PARTICLE_SYSTEM,
+    MIRROR
 };
 
 struct BoxRenderData;

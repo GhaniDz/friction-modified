@@ -176,6 +176,7 @@ private:
     AudioHandler& mAudioHandler;
     VideoEncoder& mVideoEncoder;
     qptr<SoundComposition> mCurrentSoundComposition;
+    int mAudioStartFrame = 0;
     // AUDIO
 
     ConnContextQPtr<Canvas> mCurrentScene;

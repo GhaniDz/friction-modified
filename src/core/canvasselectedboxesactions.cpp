@@ -35,6 +35,7 @@
 #include "Private/document.h"
 #include "eevent.h"
 #include "Boxes/textbox.h"
+#include "Sound/eindependentsound.h"
 
 namespace {
 
@@ -674,7 +675,7 @@ QList<BoundingBox*> Canvas::selectedBoxesList() const
 bool Canvas::moveSelectedLayerInPointToFrame(int absFrame)
 {
     const auto selected = selectedBoxesList();
-    if (selected.isEmpty()) { return false; }
+    if (selected.isEmpty() && mSelectedSounds.isEmpty()) { return false; }
     bool changed = false;
     for (const auto &box : selected) {
         if (!box->hasDurationRectangle()) { box->createDurationRectangle(); }
@@ -687,13 +688,24 @@ bool Canvas::moveSelectedLayerInPointToFrame(int absFrame)
         box->finishDurationRectPosTransform();
         changed = true;
     }
+    for (const auto &snd : mSelectedSounds) {
+        if (!snd->hasDurationRectangle()) { snd->createDurationRectangle(); }
+        const auto durRect = snd->getDurationRectangle();
+        if (!durRect) { continue; }
+        const int delta = absFrame - durRect->getMinAbsFrame();
+        if (delta == 0) { continue; }
+        snd->startDurationRectPosTransform();
+        snd->moveDurationRect(delta);
+        snd->finishDurationRectPosTransform();
+        changed = true;
+    }
     return changed;
 }
 
 bool Canvas::moveSelectedLayerOutPointToFrame(int absFrame)
 {
     const auto selected = selectedBoxesList();
-    if (selected.isEmpty()) { return false; }
+    if (selected.isEmpty() && mSelectedSounds.isEmpty()) { return false; }
     bool changed = false;
     for (const auto &box : selected) {
         if (!box->hasDurationRectangle()) { box->createDurationRectangle(); }
@@ -706,13 +718,24 @@ bool Canvas::moveSelectedLayerOutPointToFrame(int absFrame)
         box->finishDurationRectPosTransform();
         changed = true;
     }
+    for (const auto &snd : mSelectedSounds) {
+        if (!snd->hasDurationRectangle()) { snd->createDurationRectangle(); }
+        const auto durRect = snd->getDurationRectangle();
+        if (!durRect) { continue; }
+        const int delta = absFrame - durRect->getMaxAbsFrame();
+        if (delta == 0) { continue; }
+        snd->startDurationRectPosTransform();
+        snd->moveDurationRect(delta);
+        snd->finishDurationRectPosTransform();
+        changed = true;
+    }
     return changed;
 }
 
 bool Canvas::trimSelectedLayersBeforeFrame(int absFrame)
 {
     const auto selected = selectedBoxesList();
-    if (selected.isEmpty()) { return false; }
+    if (selected.isEmpty() && mSelectedSounds.isEmpty()) { return false; }
     bool changed = false;
     for (const auto &box : selected) {
         if (!box->hasDurationRectangle()) { box->createDurationRectangle(); }
@@ -726,13 +749,25 @@ bool Canvas::trimSelectedLayersBeforeFrame(int absFrame)
         box->finishMinFramePosTransform();
         changed = true;
     }
+    for (const auto &snd : mSelectedSounds) {
+        if (!snd->hasDurationRectangle()) { snd->createDurationRectangle(); }
+        const auto durRect = snd->getDurationRectangle();
+        if (!durRect) { continue; }
+        const int targetFrame = qMin(absFrame, durRect->getMaxAbsFrame());
+        const int delta = targetFrame - durRect->getMinAbsFrame();
+        if (delta == 0) { continue; }
+        snd->startMinFramePosTransform();
+        snd->moveMinFrame(delta);
+        snd->finishMinFramePosTransform();
+        changed = true;
+    }
     return changed;
 }
 
 bool Canvas::trimSelectedLayersAfterFrame(int absFrame)
 {
     const auto selected = selectedBoxesList();
-    if (selected.isEmpty()) { return false; }
+    if (selected.isEmpty() && mSelectedSounds.isEmpty()) { return false; }
     bool changed = false;
     for (const auto &box : selected) {
         if (!box->hasDurationRectangle()) { box->createDurationRectangle(); }
@@ -744,6 +779,18 @@ bool Canvas::trimSelectedLayersAfterFrame(int absFrame)
         box->startMaxFramePosTransform();
         box->moveMaxFrame(delta);
         box->finishMaxFramePosTransform();
+        changed = true;
+    }
+    for (const auto &snd : mSelectedSounds) {
+        if (!snd->hasDurationRectangle()) { snd->createDurationRectangle(); }
+        const auto durRect = snd->getDurationRectangle();
+        if (!durRect) { continue; }
+        const int targetFrame = qMax(absFrame, durRect->getMinAbsFrame());
+        const int delta = targetFrame - durRect->getMaxAbsFrame();
+        if (delta == 0) { continue; }
+        snd->startMaxFramePosTransform();
+        snd->moveMaxFrame(delta);
+        snd->finishMaxFramePosTransform();
         changed = true;
     }
     return changed;
@@ -861,21 +908,48 @@ void Canvas::removeBoxFromSelection(BoundingBox * const box) {
 
 void Canvas::clearBoxesSelection() {
     for(const auto &box : mSelectedBoxes) box->setSelected(false);
+    for(const auto &snd : mSelectedSounds) snd->setSelected(false);
     clearBoxesSelectionList();
     schedulePivotUpdate();
     setCurrentBox(nullptr);
-//    if(mLastPressedBox) {
-//        mLastPressedBox->setSelected(false);
-//        mLastPressedBox = nullptr;
-    //    }
 }
 
 void Canvas::clearBoxesSelectionList() {
-    //if(mCurrentMode == CanvasMode::paint)
-        //mPaintTarget.setPaintBox(nullptr);
     mSelectedBoxes.clear();
+    mSelectedSounds.clear();
     emit selectedPaintSettingsChanged();
     emit objectSelectionChanged();
+}
+
+void Canvas::addSoundToSelection(eBoxOrSound * const sound)
+{
+    if (sound->isSelected()) { return; }
+    mSelectedSounds.addObj(sound);
+    sound->setSelected(true);
+    emit objectSelectionChanged();
+}
+
+void Canvas::removeSoundFromSelection(eBoxOrSound * const sound)
+{
+    if (!sound->isSelected()) { return; }
+    mSelectedSounds.removeObj(sound);
+    sound->setSelected(false);
+    emit objectSelectionChanged();
+}
+
+void Canvas::clearSoundsSelection()
+{
+    for (const auto &snd : mSelectedSounds) { snd->setSelected(false); }
+    mSelectedSounds.clear();
+    emit objectSelectionChanged();
+}
+
+void Canvas::removeSelectedSounds()
+{
+    while (!mSelectedSounds.isEmpty()) {
+        const auto snd = mSelectedSounds.last();
+        mCurrentContainer->removeContained_k(snd->ref<eBoxOrSound>());
+    }
 }
 
 const QString Canvas::checkForUnsupportedBoxSVG(BoundingBox * const box)

@@ -126,6 +126,8 @@ public:
     void clearHoveredMovable();
     bool KFT_keyPressEvent(QKeyEvent *event);
     void keyframeZoomHorizontalAction();
+    QList<GraphAnimator*> selectedGraphAnimators() const;
+    GraphAnimator *graphPrimaryAnimator() const;
 protected:
     ValueInput mValueInput;
 
@@ -230,11 +232,9 @@ private:
     void graphConstrainAnimatorCtrlsFrameValues();
     void graphGetAnimatorsMinMaxValue(qreal &minVal, qreal &maxVal);
     bool graphUsesNormalizedFrameDomain() const;
-    GraphAnimator *graphPrimaryAnimator() const;
     void graphResetHorizontalRangeIfNeeded();
     QString graphFormatFrameLabel(const qreal frame) const;
     void graphMakeSegmentsSmoothAction(const bool smooth);
-    QList<GraphAnimator*> selectedGraphAnimators() const;
     bool applyQuickInterpolation(const bool smooth);
     bool applyQuickEasingPreset(const QString &presetId);
     bool applyQuickEasingFamily(const QString &family);

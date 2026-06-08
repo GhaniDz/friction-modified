@@ -721,6 +721,8 @@ void MainWindow::setupMenuBar()
 
     mViewMenu->addSeparator();
 
+    mViewMenu->addSeparator();
+
     mTimelineWindowAct = mViewMenu->addAction(tr("Layers in Window"));
     mTimelineWindowAct->setCheckable(true);
     connect(mTimelineWindowAct, &QAction::triggered,
@@ -836,6 +838,14 @@ void MainWindow::setupMenuBar()
     connect(mPanelAlignAct, &QAction::triggered,
             this, [this](bool triggered) {
                 mUI->setDockVisible(tr("Align"), triggered);
+                syncPanelsMenuState();
+            });
+
+    mPanelMotionV2Act = mPanelsMenu->addAction(tr("Motion V2"));
+    mPanelMotionV2Act->setCheckable(true);
+    connect(mPanelMotionV2Act, &QAction::triggered,
+            this, [this](bool triggered) {
+                mUI->setDockVisible(tr("Motion V2"), triggered);
                 syncPanelsMenuState();
             });
 

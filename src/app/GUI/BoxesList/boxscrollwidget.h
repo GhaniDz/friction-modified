@@ -95,8 +95,8 @@ private:
     std::unordered_map<SingleWidgetTarget*, bool> mStoredVisibility;
     std::unordered_map<SWT_Abstraction*, bool> mStoredExpanded;
     std::unordered_map<eBoxOrSound*, bool> mSoloVisibility;
+    QSet<eBoxOrSound*> mSoloTargets;
     AeRevealPreset mCurrentAeRevealPreset = AeRevealPreset::None;
-    eBoxOrSound *mSoloTarget = nullptr;
     bool mHasStoredRules = false;
     SWT_RulesCollection mStoredRules;
     ConnContextPtr<Canvas> mRevealScene;

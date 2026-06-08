@@ -546,6 +546,7 @@ void CanvasWindow::mouseMoveEvent(QMouseEvent *event)
         }
         translateView(pos - mPrevMousePos);
         pos = mPrevMousePos;
+        update();
     }
     const bool needsUpdate = mCurrentCanvas->mouseMoveEvent(eMouseEvent(pos,
                                                                         mPrevMousePos,

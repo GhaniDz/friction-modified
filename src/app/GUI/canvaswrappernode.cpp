@@ -26,6 +26,7 @@
 #include "canvaswrappernode.h"
 #include "widgets/scenechooser.h"
 #include "widgets/editablecombobox.h"
+#include "widgets/toolinteract.h"
 #include "Private/document.h"
 #include "mainwindow.h"
 
@@ -143,6 +144,14 @@ public:
         layout->addWidget(mRecallButton);
 
         layout->addStretch();
+
+        {
+            const auto sep = new QLabel(QStringLiteral("|"), this);
+            sep->setStyleSheet(QStringLiteral("color: #555;"));
+            layout->addWidget(sep);
+        }
+
+        Friction::Ui::ToolInteract::addButtonsToLayout(layout, this);
 
         const auto hint = new QLabel(tr("F5"), this);
         hint->setToolTip(tr("Toggle snapshot recall"));

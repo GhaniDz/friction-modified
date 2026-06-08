@@ -21,36 +21,34 @@
 #
 */
 
-// Fork of enve - Copyright (C) 2016-2020 Maurycy Liebner
-
 #include "motionblureffect.h"
-
 #include "Boxes/boxrenderdata.h"
 #include "Animators/qrealanimator.h"
 #include "Boxes/boundingbox.h"
 #include "appsupport.h"
 
+#include <QtMath>
+
 class MotionBlurCaller : public RasterEffectCaller {
     e_OBJECT
     friend class StdSelfRef;
     MotionBlurCaller(const HardwareSupport hwSupport,
-                      const qreal sampleCount,
-                      const qreal opacity,
-                      const QList<stdsptr<BoxRenderData>>& samples) :
+                      const QVector<qreal>& weights,
+                      const QList<stdsptr<BoxRenderData>>& samples,
+                      const qreal totalWeight) :
         RasterEffectCaller(hwSupport),
-        mSampleCount(sampleCount),
-        mOpacity(opacity),
-        mSamples(samples) {}
+        mWeights(weights),
+        mSamples(samples),
+        mTotalWeight(totalWeight) {}
 public:
     void processGpu(QGL33 * const gl,
                     GpuRenderTools& renderTools);
     void processCpu(CpuRenderTools& renderTools,
                     const CpuRenderData &data);
-
     bool srcDstSeparation() const { return false; }
 private:
     static void sDrawSample(const stdsptr<BoxRenderData>& sample,
-                            const qreal sampleOpacity,
+                            const qreal weight,
                             GpuRenderTools &renderTools,
                             QGL33 * const gl);
     static void sInitialize(QGL33 * const gl);
@@ -60,9 +58,9 @@ private:
     static GLint sOpacity2Loc;
     static GLint sRect2Loc;
 
-    const qreal mSampleCount;
-    const qreal mOpacity;
+    const QVector<qreal> mWeights;
     const QList<stdsptr<BoxRenderData>> mSamples;
+    const qreal mTotalWeight;
 };
 
 MotionBlurEffect::MotionBlurEffect() :
@@ -109,13 +107,14 @@ stdsptr<RasterEffectCaller> MotionBlurEffect::getEffectCaller(
     if(mBlocked) return nullptr;
     const MotionBlurEffectBlock block(mBlocked);
     const auto idRange = mParentBox->prp_getIdenticalRelRange(relFrame);
-    qreal sampleCount = mNumberSamples->getEffectiveValue(relFrame)*influence;
+    const qreal sampleCount = mNumberSamples->getEffectiveValue(relFrame)*influence;
     const qreal opacity = mOpacity->getEffectiveValue(relFrame)*0.01*influence;
     const qreal frameStep = mFrameStep->getEffectiveValue(relFrame);
     if(isZero4Dec(frameStep)) return nullptr;
 
     const int nSamples = qCeil(sampleCount);
-    if(nSamples == 0) return nullptr;
+    if(nSamples <= 0) return nullptr;
+
     qreal sampleRelFrame = relFrame - nSamples*frameStep;
     QList<stdsptr<BoxRenderData>> samples;
     for(int i = 0; i < nSamples; i++) {
@@ -131,12 +130,27 @@ stdsptr<RasterEffectCaller> MotionBlurEffect::getEffectCaller(
                 samples << sample;
             }
         }
-
         sampleRelFrame += frameStep;
     }
     if(samples.isEmpty()) return nullptr;
+
+    const int n = samples.size();
+    QVector<qreal> weights(n);
+    const qreal sigma = n * 0.4;
+    qreal sum = 0;
+    for(int i = 0; i < n; i++) {
+        const qreal x = i - (n - 1) * 0.5;
+        const qreal w = qExp(-0.5 * (x * x) / (sigma * sigma));
+        weights[i] = w;
+        sum += w;
+    }
+    const qreal totalWeight = qMin(sum, 1.0) * opacity;
+    for(int i = 0; i < n; i++) {
+        weights[i] = (weights[i] / sum) * totalWeight;
+    }
+
     return enve::make_shared<MotionBlurCaller>(
-                instanceHwSupport(), sampleCount, opacity, samples);
+                instanceHwSupport(), weights, samples, totalWeight);
 }
 
 FrameRange MotionBlurEffect::getMotionBlurPropsIdenticalRange(const int relFrame) const
@@ -169,36 +183,28 @@ FrameRange MotionBlurEffect::prp_getIdenticalRelRange(const int relFrame) const 
     return propsRange*effectRange;
 }
 
-void replaceIfHigherAlpha(const int x0, const int y0,
-                          const SkPixmap &dst,
-                          const SkPixmap &src,
-                          const qreal alpha) {
+static void blendPixelsAdditive(const int x0, const int y0,
+                                const SkPixmap &dst,
+                                const SkPixmap &src,
+                                const qreal weight) {
     uint8_t *dstD = static_cast<uint8_t*>(dst.writable_addr());
     const uint8_t *srcD = static_cast<const uint8_t*>(src.addr());
     const int dstRowWidth = dst.rowBytesAsPixels();
     const int srcRowWidth = src.rowBytesAsPixels();
 
-    int dstId = (y0 * dstRowWidth + x0)*4;
+    int dstId = (y0 * dstRowWidth + x0) * 4;
     int srcId = 0;
     const int yMax = qMin(src.height(), dst.height() - y0);
     const int xMax = qMin(src.width(), dst.width() - x0);
-    const int iDstYInc = qMax(0, dstRowWidth - xMax)*4;
-    const int iSrcYInc = qMax(0, srcRowWidth - xMax)*4;
+    const int iDstYInc = qMax(0, dstRowWidth - xMax) * 4;
+    const int iSrcYInc = qMax(0, srcRowWidth - xMax) * 4;
     for(int y = 0; y < yMax; y++) {
         for(int x = 0; x < xMax; x++) {
-            const int maxSrcId = srcRowWidth*src.height()*4;
-            Q_ASSERT(srcId + 3 < maxSrcId);
-            const int maxDstId = dstRowWidth*dst.height()*4;
-            Q_ASSERT(dstId + 3 < maxDstId);
-            uchar& dstAlpha = dstD[dstId + 3];
-            const uchar srcAlpha = static_cast<uchar>(qRound(srcD[srcId + 3]*alpha));
-            if(srcAlpha > dstAlpha) {
-                const qreal m2 = alpha*(1 - qreal(dstAlpha)/srcAlpha);
-                dstD[dstId] += static_cast<uint8_t>(qRound(srcD[srcId]*m2));
-                dstD[dstId + 1] += static_cast<uint8_t>(qRound(srcD[srcId + 1]*m2));
-                dstD[dstId + 2] += static_cast<uint8_t>(qRound(srcD[srcId + 2]*m2));
-                dstAlpha += static_cast<uint8_t>(qRound(srcD[srcId + 3]*m2));
-            }
+            const qreal sa = (srcD[srcId + 3] / 255.0) * weight;
+            dstD[dstId]     = static_cast<uint8_t>(qBound(0., dstD[dstId]     * (1.0 - sa) + srcD[srcId]     * sa, 255.));
+            dstD[dstId + 1] = static_cast<uint8_t>(qBound(0., dstD[dstId + 1] * (1.0 - sa) + srcD[srcId + 1] * sa, 255.));
+            dstD[dstId + 2] = static_cast<uint8_t>(qBound(0., dstD[dstId + 2] * (1.0 - sa) + srcD[srcId + 2] * sa, 255.));
+            dstD[dstId + 3] = static_cast<uint8_t>(qBound(0., dstD[dstId + 3] + srcD[srcId + 3] * weight * 0.5, 255.));
             dstId += 4;
             srcId += 4;
         }
@@ -208,7 +214,6 @@ void replaceIfHigherAlpha(const int x0, const int y0,
 }
 
 bool MotionBlurCaller::sInitialized = false;
-
 GLuint MotionBlurCaller::sProgramId = 0;
 GLint MotionBlurCaller::sOpacity2Loc = 0;
 GLint MotionBlurCaller::sRect2Loc = 0;
@@ -216,26 +221,22 @@ GLint MotionBlurCaller::sRect2Loc = 0;
 void MotionBlurCaller::sInitialize(QGL33 * const gl) {
     try {
         gIniProgram(gl, sProgramId, GL_TEXTURED_VERT,
-                   ":/shaders/maxalpha.frag");
+                   ":/shaders/motionblur.frag");
     } catch(...) {
         RuntimeThrow("Could not initialize a program for MotionBlurCaller");
     }
 
     gl->glUseProgram(sProgramId);
-
     const GLint texture1 = gl->glGetUniformLocation(sProgramId, "tex1");
     gl->glUniform1i(texture1, 0);
-
     const GLint texture2 = gl->glGetUniformLocation(sProgramId, "tex2");
     gl->glUniform1i(texture2, 1);
-
     sOpacity2Loc = gl->glGetUniformLocation(sProgramId, "opacity2");
-
     sRect2Loc = gl->glGetUniformLocation(sProgramId, "rect2");
 }
 
 void MotionBlurCaller::sDrawSample(const stdsptr<BoxRenderData>& sample,
-                                   const qreal sampleOpacity,
+                                   const qreal weight,
                                    GpuRenderTools &renderTools,
                                    QGL33 * const gl) {
     const auto& sampleImg = sample->fRenderedImage;
@@ -246,20 +247,17 @@ void MotionBlurCaller::sDrawSample(const stdsptr<BoxRenderData>& sample,
 
     gl->glActiveTexture(GL_TEXTURE1);
     texture2.bind(gl);
+    gl->glUniform1f(sOpacity2Loc, static_cast<float>(weight));
 
-    gl->glUniform1f(sOpacity2Loc, sampleOpacity);
     {
         const auto& srcGlobalRect = sample->fGlobalRect;
         const auto& dstGlobalRect = renderTools.fGlobalRect;
-
         const float left = srcGlobalRect.left() - dstGlobalRect.left();
         const float right = srcGlobalRect.right() - dstGlobalRect.left();
         const float top = srcGlobalRect.top() - dstGlobalRect.top();
         const float bottom = srcGlobalRect.bottom() - dstGlobalRect.top();
-
         const float width = dstGlobalRect.width();
         const float height = dstGlobalRect.height();
-
         gl->glUniform4f(sRect2Loc, left/width, top/height,
                         (right + 1)/width, (bottom + 1)/height);
     }
@@ -271,33 +269,18 @@ void MotionBlurCaller::sDrawSample(const stdsptr<BoxRenderData>& sample,
 void MotionBlurCaller::processGpu(QGL33 * const gl,
                                   GpuRenderTools &renderTools) {
     renderTools.switchToOpenGL(gl);
-
     if(!sInitialized) {
         sInitialize(gl);
         sInitialized = true;
     }
-
-//    renderTools.requestTargetFbo();
-//    renderTools.swapTextures();
-
-
     gl->glUseProgram(sProgramId);
 
-
-
-    const qreal opacityStep = 1/(mSampleCount + 1);
-    qreal sampleOpacity = opacityStep*(1 - qCeil(mSampleCount) + mSampleCount);
-    for(const auto& sample : mSamples) {
+    for(int i = 0; i < mSamples.size(); i++) {
         renderTools.requestTargetFbo().bind(gl);
         gl->glClear(GL_COLOR_BUFFER_BIT);
-
         gl->glActiveTexture(GL_TEXTURE0);
         renderTools.getSrcTexture().bind(gl);
-
-        const qreal sampleAlpha = qBound(0., sampleOpacity*sampleOpacity*mOpacity, 1.);
-        sampleOpacity += opacityStep;
-        sDrawSample(sample, sampleAlpha, renderTools, gl);
-
+        sDrawSample(mSamples[i], mWeights[i], renderTools, gl);
         renderTools.swapTextures();
     }
 }
@@ -307,11 +290,9 @@ void MotionBlurCaller::processCpu(CpuRenderTools& renderTools,
     const auto& bitmap = renderTools.fDstBtmp;
     SkPixmap pixmap;
     if(!bitmap.peekPixels(&pixmap)) return;
-    const qreal opacityStep = 1/(mSampleCount + 1);
-    qreal sampleOpacity = opacityStep*(1 - qCeil(mSampleCount) + mSampleCount);
-    for(const auto& sample : mSamples) {
-        const qreal sampleAlpha = qBound(0., sampleOpacity*sampleOpacity*mOpacity, 1.);
-        sampleOpacity += opacityStep;
+    for(int i = 0; i < mSamples.size(); i++) {
+        const auto& sample = mSamples[i];
+        const qreal weight = mWeights[i];
         const auto& srcImg = sample->fRenderedImage;
         if(!srcImg) continue;
         const auto rasterImg = srcImg->makeRasterImage();
@@ -324,6 +305,6 @@ void MotionBlurCaller::processCpu(CpuRenderTools& renderTools,
         if(!samplePixmap.extractSubset(&samplePart, sampleTile)) continue;
         const int drawX = sampleTile.x() < 0 ? offset.x() - data.fTexTile.x() : 0;
         const int drawY = sampleTile.y() < 0 ? offset.y() - data.fTexTile.y() : 0;
-        replaceIfHigherAlpha(drawX, drawY, pixmap, samplePart, sampleAlpha);
+        blendPixelsAdditive(drawX, drawY, pixmap, samplePart, weight);
     }
 }

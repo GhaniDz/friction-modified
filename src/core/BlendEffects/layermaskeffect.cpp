@@ -542,3 +542,8 @@ bool LayerMaskEffect::inverted() const
 {
     return mMode && mMode->getCurrentValue() == 2;
 }
+
+qreal LayerMaskEffect::featherValue(const qreal relFrame) const
+{
+    return mFeather ? mFeather->getEffectiveValue(relFrame) : 0;
+}

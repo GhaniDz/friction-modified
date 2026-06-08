@@ -82,7 +82,8 @@ ContainerBox::ContainerBox(const eBoxType type) :
             &RasterEffectCollection::forcedMarginChanged,
             this, &ContainerBox::forcedMarginMeaningfulChange);
     iniPathEffects();
-    if(type == eBoxType::layer || type == eBoxType::canvas) promoteToLayer();
+    if(type == eBoxType::layer || type == eBoxType::canvas ||
+       type == eBoxType::adjustmentLayer) promoteToLayer();
 
     mFlipBook = enve::make_shared<FlipBookProperty>("flip book");
     ca_addChild(mFlipBook);
@@ -1128,6 +1129,12 @@ void ContainerBox::selectAllBoxesFromBoxesGroup() {
         if(box->isSelected()) continue;
         pScene->addBoxToSelection(box);
     }
+    for(const auto& item : mContained) {
+        const auto ebos = item.get();
+        if (!ebos || enve_cast<BoundingBox*>(ebos)) { continue; }
+        if (ebos->isSelected()) { continue; }
+        pScene->addSoundToSelection(const_cast<eBoxOrSound*>(ebos));
+    }
 }
 
 void ContainerBox::deselectAllBoxesFromBoxesGroup() {
@@ -1135,6 +1142,13 @@ void ContainerBox::deselectAllBoxesFromBoxesGroup() {
     for(const auto& box : mContainedBoxes) {
         if(box->isSelected()) {
             pScene->removeBoxFromSelection(box);
+        }
+    }
+    for(const auto& item : mContained) {
+        const auto ebos = item.get();
+        if (!ebos || enve_cast<BoundingBox*>(ebos)) { continue; }
+        if (ebos->isSelected()) {
+            pScene->removeSoundFromSelection(const_cast<eBoxOrSound*>(ebos));
         }
     }
 }
@@ -1571,6 +1585,7 @@ void ContainerBox::writeBoxOrSoundXEV(const stdsptr<XevZipFileSaver>& xevFileSav
 #include "customboxcreator.h"
 #include "svglinkbox.h"
 #include "nullobject.h"
+#include "adjustmentlayerbox.h"
 #include "../../modules/gltf/glbbox.h"
 
 qsptr<BoundingBox> createBoxOfNonCustomType(const eBoxType type) {
@@ -1607,6 +1622,8 @@ qsptr<BoundingBox> createBoxOfNonCustomType(const eBoxType type) {
             return enve::make_shared<InternalLinkCanvas>(nullptr, false);
         case(eBoxType::nullObject):
             return enve::make_shared<NullObject>();
+        case(eBoxType::adjustmentLayer):
+            return enve::make_shared<AdjustmentLayerBox>();
         case(eBoxType::glb):
             return enve::make_shared<GlbBox>();
         case(eBoxType::deprecated0): break;

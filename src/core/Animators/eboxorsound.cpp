@@ -401,19 +401,26 @@ void eBoxOrSound::deselect() {
 void eBoxOrSound::selectionChangeTriggered(const bool shiftPressed) {
     const auto pScene = getParentScene();
     if(!pScene) return;
+    if (!shiftPressed) {
+        pScene->clearSelectedProps();
+        pScene->clearBoxesSelection();
+    }
     const auto bb = enve_cast<BoundingBox*>(this);
-    if(!bb) return;
-    if(shiftPressed) {
-        if(mSelected) {
+    if (bb) {
+        if (shiftPressed && mSelected) {
             pScene->removeBoxFromSelection(bb);
+        } else if (!shiftPressed) {
+            pScene->addBoxToSelection(bb);
         } else {
             pScene->clearSelectedProps();
             pScene->addBoxToSelection(bb);
         }
     } else {
-        pScene->clearSelectedProps();
-        pScene->clearBoxesSelection();
-        pScene->addBoxToSelection(bb);
+        if (shiftPressed && mSelected) {
+            pScene->removeSoundFromSelection(this);
+        } else {
+            pScene->addSoundToSelection(this);
+        }
     }
 }
 

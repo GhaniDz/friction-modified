@@ -29,6 +29,7 @@
 #include "Boxes/boundingbox.h"
 #include "Private/esettings.h"
 #include "appsupport.h"
+#include "Sound/esoundobjectbase.h"
 
 TimelineMovable::TimelineMovable(const Type type, Property &parentProp) :
     mType(type), mParentProperty(parentProp) {}
@@ -208,38 +209,9 @@ void DurationRectangle::draw(QPainter * const p,
                         qCeil((drawFrameSpan - 1.0) * pixelsPerFrame),
                         drawRect.height());
 
-    // why are we drawing cache handlers here?
-    Q_UNUSED(fps)
-    /*const int rectStartFrame = absFrameRange.fMin - mValue;
+    const bool isAudioTrack = enve_cast<eSoundObjectBase*>(&mParentProperty);
+    const int rectStartFrame = absFrameRange.fMin - mValue;
     const int rectEndFrame = absFrameRange.fMax - mValue;
-    if(mRasterCacheHandler && mSoundCacheHandler) {
-        const int soundHeight = drawRect.height()/3;
-        const int rasterHeight = drawRect.height() - soundHeight;
-        const QRect rasterRect(drawRect.x(), drawRect.y(),
-                               drawRect.width(), rasterHeight);
-        mRasterCacheHandler->drawCacheOnTimeline(p, rasterRect,
-                                                 rectStartFrame,
-                                                 rectEndFrame,
-                                                 1,
-                                                 durRect.right());
-        const QRect soundRect(drawRect.x(), drawRect.y() + rasterHeight,
-                              drawRect.width(), soundHeight);
-        mSoundCacheHandler->drawCacheOnTimeline(p, soundRect,
-                                                rectStartFrame,
-                                                rectEndFrame, fps,
-                                                durRect.right());
-    } else if(mRasterCacheHandler) {
-        mRasterCacheHandler->drawCacheOnTimeline(p, drawRect,
-                                                 rectStartFrame,
-                                                 rectEndFrame,
-                                                 1,
-                                                 durRect.right());
-    } else if(mSoundCacheHandler) {
-        mSoundCacheHandler->drawCacheOnTimeline(p, drawRect,
-                                                rectStartFrame,
-                                                rectEndFrame, fps,
-                                                durRect.right());
-    }*/
 
     QColor fillColor;
     if (const auto bbox = enve_cast<BoundingBox*>(&mParentProperty)) {
@@ -248,6 +220,12 @@ void DurationRectangle::draw(QPainter * const p,
             fillColor = fillColor.lighter(125);
         }
         fillColor.setAlpha(isSelected() ? 245 : 215);
+    } else if (isAudioTrack) {
+        fillColor = QColor(80, 200, 120);
+        if (isSelected()) {
+            fillColor = fillColor.lighter(125);
+        }
+        fillColor.setAlpha(isSelected() ? 245 : 200);
     } else {
         const auto& sett = eSettings::instance();
         if (isSelected()) { fillColor = sett.fSelectedVisibilityRangeColor; }
@@ -255,6 +233,20 @@ void DurationRectangle::draw(QPainter * const p,
     }
 
     p->fillRect(durRect.adjusted(0, 1, 0, -1), fillColor);
+
+    if (isAudioTrack && mSoundCacheHandler) {
+        mSoundCacheHandler->drawCacheOnTimeline(p, durRect,
+                                                rectStartFrame,
+                                                rectEndFrame, fps,
+                                                durRect.right() + 1,
+                                                durRect.height() - 2);
+    } else if (mRasterCacheHandler) {
+        mRasterCacheHandler->drawCacheOnTimeline(p, durRect,
+                                                 rectStartFrame,
+                                                 rectEndFrame,
+                                                 1,
+                                                 durRect.right() + 1);
+    }
     if (mHovered) {
         p->setPen(QPen(Qt::white, .5));
         p->drawRect(durRect);
