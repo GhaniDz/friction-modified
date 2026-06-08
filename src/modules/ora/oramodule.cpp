@@ -16,6 +16,7 @@
 #include <QFileSystemWatcher>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QPointF>
 #include <QSettings>
 #include <QSet>
 #include <QTimer>
@@ -480,6 +481,8 @@ qsptr<BoundingBox> createOraPrecompForStack(const QDomElement &stackElement,
 
     auto link = newScene->createLink(false);
     applyOraCommonAttributes(link.get(), stackElement);
+    link->setPivotRelPos(QPointF(newScene->getCanvasWidth()/2.0,
+                                 newScene->getCanvasHeight()/2.0));
     if (link->prp_getName().trimmed().isEmpty()) {
         link->prp_setName(sceneName);
     }
@@ -558,9 +561,9 @@ qsptr<BoundingBox> importOraFileAsPrecomp(const QFileInfo &fileInfo,
 
     auto link = newScene->createLink(false);
     applyOraCommonAttributes(link.get(), topStack);
-    if (link->prp_getName().trimmed().isEmpty()) {
-        link->prp_setName(newScene->prp_getName());
-    }
+    link->setPivotRelPos(QPointF(newScene->getCanvasWidth()/2.0,
+                                 newScene->getCanvasHeight()/2.0));
+    link->prp_setName(newScene->prp_getName());
     return link;
 }
 

@@ -199,6 +199,7 @@ public:
                          const bool startTrans);
 
     qreal getResolution() const;
+    qreal getRawResolution() const { return mResolution; }
     void setWorldToScreen(const QTransform& transform,
                           qreal devicePixelRatio);
     void setResolution(const qreal percent);
@@ -423,6 +424,9 @@ public:
     void restoreMarkers(const std::vector<FrameMarker> &markers);
 
     void addKeySelectedProperties();
+
+    bool isTransparencyGridOn() const { return mTransparencyGridOn; }
+    void toggleTransparencyGrid();
 
     ColorAnimator *getBgColorAnimator()
     {
@@ -908,6 +912,9 @@ protected:
     FrameRange mRange{0, 200};
 
     qreal mResolution = 0.5;
+    qreal mActiveZoom = 1.0;
+    bool mTransparencyGridOn = false;
+    QColor mSavedBgColor;
 
     qptr<BoundingBox> mCurrentBox;
     qptr<Circle> mCurrentCircle;

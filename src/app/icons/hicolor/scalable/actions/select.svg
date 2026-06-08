@@ -1,5 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" xml:space="preserve">
-    <g fill="#ffffff">
-        <path transform="translate(-444.004 -322.998)" d="M447.004 325.998v2h1v-1h1v-1zm4 0v1h2v-1zm4 0v1h2v-1zm4 0v1h1v1h1v-2zm-12 4v2h1v-2zm13 0v2h1v-2zm-13 4v2h1v-2zm13 0v2h1v-2zm-13 4v2h2v-1h-1v-1zm13 0v1h-1v1h2v-2zm-9 1v1h2v-1zm4 0v1h2v-1z" fill="#ffffff"/>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- 全选 (虚线框 + 十字) -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3">
+    <rect x="3" y="3" width="14" height="14" rx="1" stroke-dasharray="2.5,1.5"/>
+    <line x1="3" y1="10" x2="17" y2="10" stroke-width="0.8" opacity="0.4"/>
+    <line x1="10" y1="3" x2="10" y2="17" stroke-width="0.8" opacity="0.4"/>
+  </g>
 </svg>

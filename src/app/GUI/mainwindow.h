@@ -186,6 +186,8 @@ public:
     LayoutHandler* getLayoutHandler();
     TimelineDockWidget* getTimeLineWidget();
     QList<Canvas*> sceneNavigationChain() const;
+    QList<Canvas*> sceneReferenceChain(Canvas *scene) const;
+    QList<Canvas*> parentScenesForScene(Canvas *scene) const;
     void focusFontWidget(const bool focus = true);
     void focusColorWidget();
     void openMarkerEditor();

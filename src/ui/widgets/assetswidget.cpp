@@ -35,6 +35,7 @@
 #include <QDesktopServices>
 #include <QMimeData>
 #include <QSettings>
+#include <QSet>
 #include <QUrl>
 #include <QDataStream>
 #include <QHBoxLayout>
@@ -234,6 +235,23 @@ int oraRootSceneId(const QString &groupDir)
     QSettings meta(QDir(groupDir).filePath(QStringLiteral(".friction_ora_import.ini")),
                    QSettings::IniFormat);
     return meta.value(QStringLiteral("ora/rootSceneId"), -1).toInt();
+}
+
+QList<qsptr<Canvas>> oraScenesForGroupDir(const QString &groupDir)
+{
+    QList<qsptr<Canvas>> scenes;
+    if (!Document::sInstance || groupDir.isEmpty()) { return scenes; }
+
+    QSet<int> sceneIds;
+    for (const int id : oraSceneIds(groupDir)) {
+        sceneIds.insert(id);
+    }
+    for (const auto &scene : Document::sInstance->fScenes) {
+        if (scene && sceneIds.contains(scene->getDocumentId())) {
+            scenes.append(scene);
+        }
+    }
+    return scenes;
 }
 
 QString oraGroupDirForScene(Canvas *scene)
@@ -778,10 +796,36 @@ void AssetsWidget::addScene(Canvas *scene)
 {
     if (!scene || !mTree) { return; }
     const quintptr scenePtr = reinterpret_cast<quintptr>(scene);
+    const QString oraGroupDir = oraGroupDirForScene(scene);
     for (int i = 0; i < mTree->topLevelItemCount(); ++i) {
-        if (findSceneItemRecursive(mTree->topLevelItem(i), scenePtr)) {
-            return;
+        auto *existingItem = findSceneItemRecursive(mTree->topLevelItem(i), scenePtr);
+        if (!existingItem) { continue; }
+        if (!oraGroupDir.isEmpty()) {
+            auto *packageItem = oraPackageItemForGroup(mTree, oraGroupDir);
+            auto *folderItem = oraScenesFolderItem(mTree, oraGroupDir);
+            if (folderItem && existingItem->parent() != folderItem) {
+                auto *oldParent = existingItem->parent();
+                if (oldParent) {
+                    oldParent->takeChild(oldParent->indexOfChild(existingItem));
+                } else {
+                    const int topIndex = mTree->indexOfTopLevelItem(existingItem);
+                    if (topIndex >= 0) { mTree->takeTopLevelItem(topIndex); }
+                }
+                folderItem->insertChild(0, existingItem);
+                updateProjectFolderItemSummary(folderItem);
+                if (oldParent) {
+                    updateProjectFolderItemSummary(oldParent);
+                    pruneEmptyFolderBranch(mTree, oldParent);
+                }
+                updateProjectFolderItemSummary(packageItem);
+                packageItem->setExpanded(true);
+            }
+            if (packageItem && scene->getDocumentId() == oraRootSceneId(oraGroupDir)) {
+                packageItem->setData(0, kProjectFolderRootSceneRole,
+                                    QVariant::fromValue<quintptr>(scenePtr));
+            }
         }
+        return;
     }
 
     auto *item = new QTreeWidgetItem();
@@ -793,10 +837,13 @@ void AssetsWidget::addScene(Canvas *scene)
     item->setFlags(item->flags() | Qt::ItemIsEnabled |
                    Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
 
-    const QString oraGroupDir = oraGroupDirForScene(scene);
     if (!oraGroupDir.isEmpty()) {
         auto *packageItem = oraPackageItemForGroup(mTree, oraGroupDir);
         auto *folderItem = oraScenesFolderItem(mTree, oraGroupDir);
+        if (!folderItem) {
+            delete item;
+            return;
+        }
         if (packageItem && scene->getDocumentId() == oraRootSceneId(oraGroupDir)) {
             packageItem->setData(0, kProjectFolderRootSceneRole,
                                 QVariant::fromValue<quintptr>(
@@ -1037,6 +1084,13 @@ void AssetsWidget::removeItemFromProject(QTreeWidgetItem *item)
         QList<qsptr<Canvas>> scenesToRemove;
         QList<FileCacheHandler*> cachesToDetach;
         collectProjectItemContents(item, scenesToRemove, cachesToDetach);
+        if (folderType == projectFolderTypeOra()) {
+            for (const auto &scene : oraScenesForGroupDir(folderId)) {
+                if (!scenesToRemove.contains(scene)) {
+                    scenesToRemove.append(scene);
+                }
+            }
+        }
 
         while (item->childCount() > 0) {
             delete item->takeChild(0);

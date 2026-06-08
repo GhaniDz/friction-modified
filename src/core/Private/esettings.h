@@ -154,6 +154,11 @@ public:
 
     bool fPreviewCache = true;
 
+    // preview resolution: -1.0 = Auto (adapt to zoom), 0.01..1.0 = manual fraction
+    qreal fPreviewResolution = -1.0;
+    static qreal sPreviewResolution() { return sInstance->fPreviewResolution; }
+    static void setPreviewResolution(const qreal v) { sInstance->fPreviewResolution = v; }
+
     // timeline settings
     bool fTimelineAlternateRow = false;
     QColor fTimelineAlternateRowColor = QColor(0, 0, 0, 25);

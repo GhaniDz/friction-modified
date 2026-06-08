@@ -344,7 +344,8 @@ Actions::Actions(Document &document) : mDocument(document) {
         const auto actionCan = [this]() {
             if(!mActiveScene) return false;
             return !mActiveScene->isBoxSelectionEmpty() ||
-                   !mActiveScene->isPointSelectionEmpty();
+                   !mActiveScene->isPointSelectionEmpty() ||
+                   mActiveScene->hasSelectedProperties();
         };
         const auto actionExec = [this]() {
             mActiveScene->deleteAction();
@@ -357,7 +358,8 @@ Actions::Actions(Document &document) : mDocument(document) {
     { // copyAction
         const auto actionCan = [this]() {
             if(!mActiveScene) return false;
-            return !mActiveScene->isBoxSelectionEmpty();
+            return !mActiveScene->isBoxSelectionEmpty() ||
+                   mActiveScene->hasSelectedProperties();
         };
         const auto actionExec = [this]() {
             mActiveScene->copyAction();
@@ -382,7 +384,8 @@ Actions::Actions(Document &document) : mDocument(document) {
     { // cutAction
         const auto actionCan = [this]() {
             if(!mActiveScene) return false;
-            return !mActiveScene->isBoxSelectionEmpty();
+            return !mActiveScene->isBoxSelectionEmpty() ||
+                   mActiveScene->hasSelectedProperties();
         };
         const auto actionExec = [this]() {
             mActiveScene->cutAction();
@@ -811,11 +814,13 @@ eBoxOrSound *Actions::importFile(const QString &path,
                                 fInfo.dir().absolutePath());
     }
 
+    bool centerPivotOnImport = true;
     if (fInfo.isDir()) {
         result = createImageSequenceBox(path);
         target->insertContained(insertId, result);
     } else { // is file
         const QString extension = fInfo.suffix();
+        centerPivotOnImport = extension.compare(QStringLiteral("ora"), Qt::CaseInsensitive) != 0;
         if (isSoundExt(extension)) {
             result = createSoundForPath(path);
             target->insertContained(insertId, result);
@@ -842,7 +847,9 @@ eBoxOrSound *Actions::importFile(const QString &path,
         target->prp_pushUndoRedoName(tr("Import File"));
         target->insertContained(insertId, result);
         if (const auto importedBox = enve_cast<BoundingBox*>(result)) {
-            importedBox->planCenterPivotPosition();
+            if (centerPivotOnImport) {
+                importedBox->planCenterPivotPosition();
+            }
             importedBox->startPosTransform();
             importedBox->moveByAbs(relDropPos);
             importedBox->finishTransform();

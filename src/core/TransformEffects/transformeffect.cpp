@@ -26,6 +26,8 @@
 #include "transformeffect.h"
 #include "typemenu.h"
 #include "Animators/dynamiccomplexanimator.h"
+#include "clipboardcontainer.h"
+#include "Private/document.h"
 
 TransformEffect::TransformEffect(const QString &name,
                                  const TransformEffectType type) :
@@ -44,6 +46,14 @@ void TransformEffect::writeIdentifierXEV(QDomElement& ele) const {
 void TransformEffect::prp_setupTreeViewMenu(PropertyMenu * const menu) {
     if(menu->hasActionsForType<TransformEffect>()) return;
     menu->addedActionsForType<TransformEffect>();
+    {
+        const PropertyMenu::AllOp<TransformEffect> cOp =
+        [](const QList<TransformEffect*> &effects) {
+            const auto clipboard = enve::make_shared<EffectsClipboard>(effects);
+            Document::sInstance->replaceClipboard(clipboard);
+        };
+        menu->addPlainAction(QIcon::fromTheme("copy"), tr("Copy Effect(s)"), cOp);
+    }
     {
         const PropertyMenu::PlainSelectedOp<TransformEffect> dOp =
         [](TransformEffect* const prop) {

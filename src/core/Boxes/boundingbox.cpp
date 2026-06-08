@@ -1567,6 +1567,12 @@ void BoundingBox::ensureBlendEffectsVisible()
     }
 }
 
+void BoundingBox::applyBlendEffectsToCanvas(SkCanvas * const canvas) {
+    if(blendEffectsEnabled()) {
+        mBlendEffectCollection->drawBlendSetup(canvas);
+    }
+}
+
 void BoundingBox::addTransformEffect(const qsptr<TransformEffect> &transformEffect)
 {
     mTransformEffectCollection->addChild(transformEffect);

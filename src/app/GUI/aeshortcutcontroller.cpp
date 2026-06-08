@@ -193,21 +193,21 @@ bool AeShortcutController::handleGlobalShortcut(QKeyEvent *event)
 
     if (matches(event, QStringLiteral("aeCenterPivot"), QStringLiteral("Ctrl+Home"))) {
         if (scene) {
-            scene->centerPivotForSelected();
-            showStatusMessage(tr("AE: Center Pivot"));
+            scene->alignSelectedBoxes(Qt::AlignHCenter,
+                                      AlignPivot::pivot,
+                                      AlignRelativeTo::scene);
+            scene->alignSelectedBoxes(Qt::AlignVCenter,
+                                      AlignPivot::pivot,
+                                      AlignRelativeTo::scene);
+            showStatusMessage(tr("AE: Align to Composition Center"));
             return true;
         }
     }
 
     if (matches(event, QStringLiteral("aeAlignCenter"), QStringLiteral("Ctrl+Alt+Home"))) {
         if (scene) {
-            scene->alignSelectedBoxes(Qt::AlignHCenter,
-                                      AlignPivot::geometry,
-                                      AlignRelativeTo::scene);
-            scene->alignSelectedBoxes(Qt::AlignVCenter,
-                                      AlignPivot::geometry,
-                                      AlignRelativeTo::scene);
-            showStatusMessage(tr("AE: Align to Composition Center"));
+            scene->centerPivotForSelected();
+            showStatusMessage(tr("AE: Center Pivot"));
             return true;
         }
     }

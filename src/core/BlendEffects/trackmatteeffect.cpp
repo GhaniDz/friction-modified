@@ -143,19 +143,33 @@ void TrackMatteEffect::detachedBlendSetup(
     const bool isInverted = invert();
     delayed << [boxToDraw, matte, relFrame, isInverted, canvas, filter]
                (int, BoundingBox* prev, BoundingBox* next) {
-        Q_UNUSED(prev)
-        if(next != boxToDraw) return false;
+        // Match next to boxToDraw, including link target resolution.
+        if(!next) {
+            return false;
+        }
+        if(next != boxToDraw && next->getLinkBoxTarget() != boxToDraw) {
+            return false;
+        }
 
-        const qreal absFrame = boxToDraw->prp_relFrameToAbsFrameF(relFrame);
+        // Resolve actual box and matte for link (inner link) case
+        const auto actualBox = next;
+        const auto actualMatte =
+                (prev && prev->getLinkBoxTarget() == matte) ? prev : matte;
+
+        const qreal absFrame = actualBox->prp_relFrameToAbsFrameF(relFrame);
         const qreal matteRelFrame = matte->prp_absFrameToRelFrameF(absFrame);
         const auto boxData =
-                boxToDraw->getLatestFinishedRenderData(relFrame);
+                actualBox->getLatestFinishedRenderData(relFrame);
         const auto matteData =
-                matte->getLatestFinishedRenderData(matteRelFrame);
+                actualMatte->getLatestFinishedRenderData(matteRelFrame);
         const auto boxDrawData =
-                TrackMatteDrawResolver::resolve(boxToDraw, relFrame, boxData);
+                TrackMatteDrawResolver::resolve(
+                        actualBox, relFrame, boxData,
+                        TrackMatteDrawResolver::CoordinateMode::Display);
         const auto matteDrawData =
-                TrackMatteDrawResolver::resolve(matte, matteRelFrame, matteData);
+                TrackMatteDrawResolver::resolve(
+                        actualMatte, matteRelFrame, matteData,
+                        TrackMatteDrawResolver::CoordinateMode::Display);
         if(!boxDrawData) {
             return true;
         }

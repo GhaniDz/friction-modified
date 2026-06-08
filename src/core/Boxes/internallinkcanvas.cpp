@@ -54,6 +54,7 @@ InternalLinkCanvas::InternalLinkCanvas(ContainerBox * const linkTarget,
     InternalLinkGroupBox(linkTarget, innerLink) {
     mType = eBoxType::internalLinkCanvas;
     mFrameRemapping->disableAction();
+    mClipToCanvas->setValue(true);
     mClipToCanvas->SWT_hide();
     ca_prependChild(mTransformAnimator.data(), mClipToCanvas);
     ca_prependChild(mTransformAnimator.data(), mFrameRemapping);
@@ -119,7 +120,7 @@ void InternalLinkCanvas::setupRenderData(const qreal relFrame,
                     reusableFrame = cachedFrame.get();
                 }
             }
-            if(reusableFrame) {
+            if(reusableFrame && !canvasData->fClipToCanvas) {
                 canvasData->setCachedSceneFrame(reusableFrame);
             } else {
                 if(cachedFrame && !cachedFrame->storesDataInMemory()) {

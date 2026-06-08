@@ -145,6 +145,7 @@ public:
     KeysClipboard* getKeysClipboard() const;
     BoxesClipboard* getBoxesClipboard() const;
     SmartPathClipboard* getSmartPathClipboard() const;
+    EffectsClipboard* getEffectsClipboard() const;
 
     void setPath(const QString& path);
     QString projectDirectory() const;

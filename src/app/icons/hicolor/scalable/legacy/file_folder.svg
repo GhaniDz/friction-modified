@@ -1,6 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" xml:space="preserve">
-    <g fill="#ffffff">
-        <path d="M363.5 95a.5.5 0 0 0-.5.5V99h14v-1.5a.5.5 0 0 0-.5-.5H368v-1.5a.5.5 0 0 0-.5-.5z" fill="#ffffff" transform="translate(-360 -91.5)"/>
-        <path fill="#ffffff" d="M363.5 100a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5z" transform="translate(-360 -91.5)"/>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- 打开/文件夹 -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3">
+    <path d="M2,7 L2,16 C2,16.6 2.4,17 3,17 L17,17 C17.6,17 18,16.6 18,16 L18,8 C18,7.4 17.6,7 17,7 L10,7 L9,5 L4,5 C3.4,5 3,5.4 3,6 L3,7 Z"/>
+    <!-- 文件夹标签 -->
+    <path d="M2,8 C2,7.4 2.4,7 3,7 L9,7 L10,9 L17,9"/>
+  </g>
 </svg>

@@ -18,6 +18,9 @@ bool isDrawableTarget(BoundingBox* const box);
 QString nextMaskName(BoundingBox* const target,
                      ContainerBox* const parent);
 
+void attachLayerMaskPath(BoundingBox* const target,
+                         PathBox* const maskPath);
+
 void attachLayerMaskEffect(BoundingBox* const target,
                            PathBox* const maskPath);
 

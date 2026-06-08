@@ -38,6 +38,9 @@ class ContainerBox;
 class Key;
 class Animator;
 class Property;
+class RasterEffect;
+class TransformEffect;
+class BlendEffect;
 
 typedef QPair<qptr<Animator>, QByteArray> AnimatorKeyDataPair;
 
@@ -48,7 +51,8 @@ enum class ClipboardType : short {
     property,
     box,
     dynamicProperties,
-    smartPath
+    smartPath,
+    effects
 };
 
 class CORE_EXPORT Clipboard : public StdSelfRef {
@@ -74,6 +78,28 @@ public:
     const SmartPath& path() const { return mPath; }
 private:
     SmartPath mPath;
+};
+
+class CORE_EXPORT EffectsClipboard : public Clipboard {
+    e_OBJECT
+public:
+    EffectsClipboard(const QList<RasterEffect*> &rasterEffects,
+                     const QList<TransformEffect*> &transformEffects,
+                     const QList<BlendEffect*> &blendEffects);
+    EffectsClipboard(const QList<RasterEffect*> &rasterEffects);
+    EffectsClipboard(const QList<TransformEffect*> &transformEffects);
+    EffectsClipboard(const QList<BlendEffect*> &blendEffects);
+    EffectsClipboard(RasterEffect * const rasterEffect);
+    EffectsClipboard(TransformEffect * const transformEffect);
+    EffectsClipboard(BlendEffect * const blendEffect);
+
+    bool pasteTo(BoundingBox * const target);
+private:
+    enum class EffectsType : int {
+        raster,
+        transform,
+        blend
+    };
 };
 
 class CORE_EXPORT BoxesClipboard : public Clipboard {

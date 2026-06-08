@@ -26,6 +26,8 @@
 #include "rastereffect.h"
 #include "Animators/dynamiccomplexanimator.h"
 #include "typemenu.h"
+#include "clipboardcontainer.h"
+#include "Private/document.h"
 
 RasterEffect::RasterEffect(const QString &name,
                            const HardwareSupport hwSupport,
@@ -55,6 +57,12 @@ void RasterEffect::writeIdentifierXEV(QDomElement& ele) const {
 
 void RasterEffect::prp_setupTreeViewMenu(PropertyMenu * const menu) {
     eEffect::prp_setupTreeViewMenu(menu);
+    const PropertyMenu::AllOp<RasterEffect> cOp =
+    [](const QList<RasterEffect*> &effects) {
+        const auto clipboard = enve::make_shared<EffectsClipboard>(effects);
+        Document::sInstance->replaceClipboard(clipboard);
+    };
+    menu->addPlainAction(QIcon::fromTheme("copy"), tr("Copy Effect(s)"), cOp);
     const PropertyMenu::PlainSelectedOp<RasterEffect> dOp =
     [](RasterEffect* const eff) {
         const auto parent = eff->getParent<DynamicComplexAnimatorBase<RasterEffect>>();

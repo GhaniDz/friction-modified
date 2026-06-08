@@ -1,5 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" xml:space="preserve">
-    <g fill="#ffffff">
-        <path fill="#ffffff" d="M158.48 493a.5.5 0 0 0-.384.197l-4.95 4.95a.5.5 0 0 0 .354.853h5a.5.5 0 0 0 .5-.5V494h5v12h-10v-6h-1v6.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-6.02z" transform="translate(-149 -490)"/>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- 新建文档 -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3">
+    <path d="M3.5,3 L11,3 L16.5,8.5 L16.5,17 C16.5,17.3 16.3,17.5 16,17.5 L4,17.5 C3.7,17.5 3.5,17.3 3.5,17 Z"/>
+    <path d="M3.5,3 C3.5,2.7 3.7,2.5 4,2.5 L11,2.5 L16.5,8"/>
+    <line x1="11" y1="2.5" x2="11" y2="8"/>
+    <line x1="16.5" y1="8" x2="11" y2="8"/>
+  </g>
 </svg>

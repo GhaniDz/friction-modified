@@ -892,7 +892,7 @@ component("skia") {
   # This file (and all GN files in Skia) are designed to work with an
   # empty sources assignment filter; we handle all that explicitly.
   # We clear the filter here for clients who may have set up a global filter.
-  set_sources_assignment_filter([])
+  # set_sources_assignment_filter([])  # deprecated/removed in newer GN
 
   public = skia_core_public
   public += skia_utils_public

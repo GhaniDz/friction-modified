@@ -70,8 +70,9 @@ TrackMatteDrawResolver::DrawData resolveTrackMatteDrawData(
     }
 
     const auto drawData =
-            TrackMatteDrawResolver::resolve(box, child.fData->fRelFrame,
-                                            child.fData);
+            TrackMatteDrawResolver::resolve(
+                    box, child.fData->fRelFrame, child.fData,
+                    TrackMatteDrawResolver::CoordinateMode::Render);
     resolvedDrawDataByRenderData.insert(renderData, drawData);
     return drawData;
 }
@@ -86,14 +87,20 @@ bool drawTrackMatteChild(const ChildRenderData& child,
         return false;
     }
 
-    const auto box = child.fData->fParentBox.data();
+    auto box = child.fData->fParentBox.data();
     if(!box) {
         return false;
     }
 
-    const auto trackMatte = box->getTrackMatteEffect();
+    auto trackMatte = box->getTrackMatteEffect();
     if(!trackMatte) {
-        return false;
+        // Check link target for track matte effect (inner link case)
+        const auto linkTarget = box->getLinkBoxTarget();
+        if(linkTarget) {
+            box = linkTarget;
+            trackMatte = box->getTrackMatteEffect();
+        }
+        if(!trackMatte) return false;
     }
 
     const auto matteSource = trackMatte->matteSource();

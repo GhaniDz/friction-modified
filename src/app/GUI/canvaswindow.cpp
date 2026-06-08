@@ -753,13 +753,17 @@ bool CanvasWindow::handleZValueKeyPress(QKeyEvent *event)
     } else if (!altPressed && !metaPressed && ctrlPressed &&
                event->key() == Qt::Key_BracketRight) {
        mCurrentCanvas->raiseSelectedBoxes();
-    } else if (event->key() == Qt::Key_PageUp) {
+    } else if (!altPressed && !metaPressed && !ctrlPressed &&
+               event->key() == Qt::Key_PageUp) {
        mCurrentCanvas->raiseSelectedBoxes();
-    } else if (event->key() == Qt::Key_PageDown) {
+    } else if (!altPressed && !metaPressed && !ctrlPressed &&
+               event->key() == Qt::Key_PageDown) {
        mCurrentCanvas->lowerSelectedBoxes();
-    } else if (event->key() == Qt::Key_End) {
+    } else if (!altPressed && !metaPressed && !ctrlPressed &&
+               event->key() == Qt::Key_End) {
        mCurrentCanvas->lowerSelectedBoxesToBottom();
-    } else if (event->key() == Qt::Key_Home) {
+    } else if (!altPressed && !metaPressed && !ctrlPressed &&
+               event->key() == Qt::Key_Home) {
        mCurrentCanvas->raiseSelectedBoxesToTop();
     } else { return false; }
     return true;
@@ -991,10 +995,24 @@ bool CanvasWindow::KFT_keyPressEvent(QKeyEvent *event)
     return true;
 }
 
+void CanvasWindow::toggleTransparencyGrid()
+{
+    if (!mCurrentCanvas) { return; }
+    mCurrentCanvas->toggleTransparencyGrid();
+    finishAction();
+}
+
+bool CanvasWindow::isTransparencyGridOn() const
+{
+    if (!mCurrentCanvas) { return false; }
+    return mCurrentCanvas->isTransparencyGridOn();
+}
+
 void CanvasWindow::setResolution(const qreal fraction)
 {
     if (!mCurrentCanvas) { return; }
-    if (isZero6Dec(mCurrentCanvas->getResolution() - fraction)) {
+    // Auto mode (-1.0) is always accepted; compare stored value for manual
+    if (fraction >= 0.0 && isZero6Dec(mCurrentCanvas->getResolution() - fraction)) {
         return;
     }
     if (RenderHandler::sInstance) {

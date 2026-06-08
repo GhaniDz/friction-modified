@@ -102,7 +102,7 @@ void RenderHandler::renderFromSettings(RenderInstanceSettings * const settings) 
     mCurrentScene->clearPreviewDisplayFrame();
     if(VideoEncoder::sStartEncoding(settings)) {
         mSavedCurrentFrame = mCurrentScene->getAnimationFrame();
-        mSavedResolutionFraction = mCurrentScene->getResolution();
+        mSavedResolutionFraction = mCurrentScene->getRawResolution();
 
         mCurrentRenderSettings = settings;
         mOutputAdvanceQueued = false;
@@ -644,7 +644,7 @@ void RenderHandler::playPreview() {
     if(!renderingPreviewValue()) {
         mSavedCurrentFrame = mCurrentScene->getAnimationFrame();
         auto timingState = previewTimingStateValue();
-        timingState.fBaseResolution = mCurrentScene->getResolution();
+        timingState.fBaseResolution = mCurrentScene->getRawResolution();
         setPreviewTimingState(timingState);
 
         const auto fIn = mCurrentScene->getFrameIn();

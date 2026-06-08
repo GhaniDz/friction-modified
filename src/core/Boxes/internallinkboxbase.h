@@ -27,6 +27,7 @@
 #define INTERNALLINKBOXBASE_H
 
 #include "boundingbox.h"
+#include "layerboxrenderdata.h"
 #include "Timeline/durationrectangle.h"
 
 template <typename BoxT>
@@ -72,6 +73,9 @@ public:
             SkCanvas * const canvas,
             const SkFilterQuality filter, int& drawId,
             QList<BlendEffect::Delayed> &delayed) const override;
+    void drawPixmapSk(SkCanvas * const canvas,
+                      const SkFilterQuality filter, int &drawId,
+                      QList<BlendEffect::Delayed> &delayed) const override;
 
     void saveSVG(SvgExporter& exp, DomEleTask* const task) const override;
 
@@ -82,6 +86,8 @@ protected:
     ConnContext& assignLinkTarget(BoxT * const linkTarget);
     BoxT *getLinkTarget() const
     { return mLinkTarget; }
+    BoundingBox *getLinkBoxTarget() const override
+    { return getLinkTarget(); }
 
     const qsptr<BoxTargetProperty> mBoxTarget =
             enve::make_shared<BoxTargetProperty>("link target");
@@ -130,6 +136,25 @@ HardwareSupport ILBB::hardwareSupport() const {
     const auto linkTarget = getLinkTarget();
     if(!linkTarget) return BoxT::hardwareSupport();
     return linkTarget->hardwareSupport();
+}
+
+template <typename BoxT>
+void ILBB::drawPixmapSk(SkCanvas * const canvas,
+                         const SkFilterQuality filter, int &drawId,
+                         QList<BlendEffect::Delayed> &delayed) const {
+    if(mInnerLink) {
+        const auto linkTarget = getLinkTarget();
+        if(linkTarget) {
+            canvas->save();
+            linkTarget->applyBlendEffectsToCanvas(canvas);
+        }
+        BoundingBox::drawPixmapSk(canvas, filter, drawId, delayed);
+        if(linkTarget) {
+            canvas->restore();
+        }
+    } else {
+        BoundingBox::drawPixmapSk(canvas, filter, drawId, delayed);
+    }
 }
 
 template<typename BoxT>
@@ -274,6 +299,7 @@ stdsptr<BoxRenderData> ILBB::createRenderData() {
     if(!renderData) return nullptr;
     renderData->fParentBox = this;
     if(!mInnerLink) renderData->fBlendEffectIdentifier = this;
+    else renderData->fBlendEffectIdentifier = linkTarget;
     return renderData;
 }
 
@@ -284,7 +310,25 @@ void ILBB::blendSetup(ChildRenderData& data,
     if(mInnerLink) {
         const auto linkTarget = getLinkTarget();
         if(!linkTarget) return;
+        const int clipCountBefore = data.fClip.fClipOps.count();
         linkTarget->blendSetup(data, index, relFrame, delayed);
+        // Transform clip paths from original Canvas coordinates to link coordinates
+        const int clipCountAfter = data.fClip.fClipOps.count();
+        if(clipCountAfter > clipCountBefore) {
+            const auto absFrame = this->prp_relFrameToAbsFrameF(relFrame);
+            const auto parentGroup = this->getParentGroup();
+            const auto targetParent = linkTarget->getParentGroup();
+            if(parentGroup && targetParent) {
+                const auto linkTotal = parentGroup->getTotalTransformAtFrame(absFrame);
+                const auto originalTotal = targetParent->getTotalTransformAtFrame(absFrame);
+                const auto originalInv = originalTotal.inverted();
+                const auto fixMatrix = linkTotal * originalInv;
+                const auto skFix = toSkMatrix(fixMatrix);
+                for(int i = clipCountBefore; i < clipCountAfter; i++) {
+                    data.fClip.fClipOps[i].fClipPath.transform(skFix);
+                }
+            }
+        }
     } else BoxT::blendSetup(data, index, relFrame, delayed);
 }
 

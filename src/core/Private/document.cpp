@@ -189,6 +189,12 @@ SmartPathClipboard* Document::getSmartPathClipboard() const
     return static_cast<SmartPathClipboard*>(contT);
 }
 
+EffectsClipboard* Document::getEffectsClipboard() const
+{
+    auto contT = getClipboard(ClipboardType::effects);
+    return static_cast<EffectsClipboard*>(contT);
+}
+
 void Document::setPath(const QString &path)
 {
     fEvFile = path;

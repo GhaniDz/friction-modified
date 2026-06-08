@@ -598,23 +598,12 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
         }
     });
 
-    mCollapseToggle = new QPushButton(this);
-    mCollapseToggle->setObjectName(QStringLiteral("AeTimelineToggleButton"));
-    mCollapseToggle->setCheckable(true);
-    mCollapseToggle->setFlat(true);
-    mCollapseToggle->setFocusPolicy(Qt::NoFocus);
-    mCollapseToggle->setToolTip(tr("Collapse transformations"));
-    mCollapseToggle->setFixedSize(qRound(eSizesUI::widget * 0.95), qRound(eSizesUI::widget * 0.95));
-    mCollapseToggle->setIconSize(QSize(qRound(eSizesUI::widget * 0.8), qRound(eSizesUI::widget * 0.8)));
-    mCollapseToggle->hide();
-    mMainLayout->addWidget(mCollapseToggle);
-
     mPromoteDemoteToggle = new QPushButton(this);
     mPromoteDemoteToggle->setObjectName(QStringLiteral("AeTimelineToggleButton"));
     mPromoteDemoteToggle->setCheckable(true);
     mPromoteDemoteToggle->setFlat(true);
     mPromoteDemoteToggle->setFocusPolicy(Qt::NoFocus);
-    mPromoteDemoteToggle->setToolTip(tr("Promote to Layer / Demote to Group"));
+    mPromoteDemoteToggle->setToolTip(tr("Collapse Transformations"));
     mPromoteDemoteToggle->setFixedSize(qRound(eSizesUI::widget * 0.95), qRound(eSizesUI::widget * 0.95));
     mPromoteDemoteToggle->setIconSize(QSize(qRound(eSizesUI::widget * 0.8), qRound(eSizesUI::widget * 0.8)));
     mPromoteDemoteToggle->hide();
@@ -697,25 +686,12 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
         mSoloButton->setIcon(QIcon(soloOff));
         mSoloButton->setProperty("iconOn", QVariant::fromValue(QIcon(soloOn)));
         mSoloButton->setProperty("iconOff", QVariant::fromValue(QIcon(soloOff)));
-        mCollapseToggle->setIcon(QIcon(collapseOff));
-        mCollapseToggle->setProperty("iconOn", QVariant::fromValue(QIcon(collapseOn)));
-        mCollapseToggle->setProperty("iconOff", QVariant::fromValue(QIcon(collapseOff)));
         mPromoteDemoteToggle->setIcon(QIcon(promoteOff));
         mPromoteDemoteToggle->setProperty("iconOn", QVariant::fromValue(QIcon(promoteOn)));
         mPromoteDemoteToggle->setProperty("iconOff", QVariant::fromValue(QIcon(promoteOff)));
         mMotionBlurToggle->setIcon(QIcon(mbOff));
         mMotionBlurToggle->setProperty("iconOn", QVariant::fromValue(QIcon(mbOn)));
         mMotionBlurToggle->setProperty("iconOff", QVariant::fromValue(QIcon(mbOff)));
-
-        connect(mCollapseToggle, &QPushButton::clicked, this, [this]() {
-            if(!mTarget) return;
-            const auto box = enve_cast<BoundingBox*>(mTarget->getTarget());
-            const auto linkCanvas = enve_cast<InternalLinkCanvas*>(box);
-            if(!linkCanvas) return;
-            auto prop = linkCanvas->clipToCanvasProperty();
-            if(prop) prop->setValue(!prop->getValue());
-            Document::sInstance->actionFinished();
-        });
 
         auto wireToggle = [this](QPushButton *btn) {
             connect(btn, &QPushButton::toggled, this, [btn](bool on) {
@@ -724,7 +700,6 @@ BoxSingleWidget::BoxSingleWidget(BoxScroller * const parent)
             });
         };
         wireToggle(mSoloButton);
-        wireToggle(mCollapseToggle);
         wireToggle(mPromoteDemoteToggle);
         wireToggle(mMotionBlurToggle);
     }
@@ -942,8 +917,16 @@ void BoxSingleWidget::togglePromoteDemote()
     if(!targetGroup) return;
     if(targetGroup->isLayer()) {
         targetGroup->demoteToGroup();
+        // AE: Collapse ON = Group mode + no clip
+        if(const auto linkCanvas = enve_cast<InternalLinkCanvas*>(targetGroup)) {
+            linkCanvas->clipToCanvasProperty()->setValue(false);
+        }
     } else if(targetGroup->isGroup()) {
         targetGroup->promoteToLayer();
+        // AE: Collapse OFF = Layer mode + clip to canvas
+        if(const auto linkCanvas = enve_cast<InternalLinkCanvas*>(targetGroup)) {
+            linkCanvas->clipToCanvasProperty()->setValue(true);
+        }
     }
     Document::sInstance->actionFinished();
 }
@@ -1256,7 +1239,7 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
                                    this, [this](const eBoxType type) {
                 mBlendModeCombo->setEnabled(type != eBoxType::group);
                 mPromoteDemoteToggle->blockSignals(true);
-                mPromoteDemoteToggle->setChecked(type != eBoxType::group);
+                mPromoteDemoteToggle->setChecked(type == eBoxType::group);
                 mPromoteDemoteToggle->blockSignals(false);
             });
         }
@@ -1274,7 +1257,6 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
     mTimelineCollapseVisible = false;
     mParentPickWhipButton->hide();
     mMattePickWhipButton->hide();
-    mCollapseToggle->hide();
     mPromoteDemoteToggle->hide();
     mMotionBlurToggle->hide();
     mSoloButton->hide();
@@ -1299,26 +1281,13 @@ void BoxSingleWidget::setTargetAbstraction(SWT_Abstraction *abs) {
             mTimelineMatteVisible = true;
             mTimelineCollapseVisible = true;
             mSoloButton->show();
-            mCollapseToggle->show();
             mPromoteDemoteToggle->show();
             mMotionBlurToggle->show();
-            {
-                const auto linkCanvas2 = enve_cast<InternalLinkCanvas*>(boundingBox);
-                mCollapseToggle->setEnabled(linkCanvas2 != nullptr);
-                mCollapseToggle->blockSignals(true);
-                if(linkCanvas2) {
-                    auto prop = linkCanvas2->clipToCanvasProperty();
-                    mCollapseToggle->setChecked(prop ? prop->getValue() : false);
-                } else {
-                    mCollapseToggle->setChecked(false);
-                }
-                mCollapseToggle->blockSignals(false);
-            }
             {
                 const auto tg = getPromoteTargetGroup();
                 mPromoteDemoteToggle->setEnabled(tg != nullptr);
                 mPromoteDemoteToggle->blockSignals(true);
-                mPromoteDemoteToggle->setChecked(tg ? tg->isLayer() : false);
+                mPromoteDemoteToggle->setChecked(tg ? tg->isGroup() : false);
                 mPromoteDemoteToggle->blockSignals(false);
             }
             {
@@ -2300,9 +2269,7 @@ void BoxSingleWidget::updateTimelineRelationCombosVisible() {
         mTrackMatteCombo->hide();
     }
     if (mTimelineCollapseVisible && canShowCollapse) {
-        mCollapseToggle->show();
-    } else {
-        mCollapseToggle->hide();
+        // Collapse is now unified with Promote/Demote toggle
     }
 }
 

@@ -57,6 +57,12 @@
 #include "simpletask.h"
 #include "themesupport.h"
 #include "efiltersettings.h"
+#include "RasterEffects/rastereffect.h"
+#include "TransformEffects/transformeffect.h"
+#include "BlendEffects/blendeffect.h"
+#include "BlendEffects/layermaskeffect.h"
+#include "Animators/dynamiccomplexanimator.h"
+#include "Boxes/pathbox.h"
 
 using namespace Friction::Core;
 
@@ -66,6 +72,48 @@ bool exportDebugEnabled()
 {
     static const bool enabled = qEnvironmentVariableIsSet("FRICTION_EXPORT_DEBUG");
     return enabled;
+}
+
+bool propertyBelongsToMaskPath(Property* const prop,
+                               PathBox* const maskPath)
+{
+    if(!prop || !maskPath) {
+        return false;
+    }
+    if(prop == maskPath) {
+        return true;
+    }
+    return maskPath->prp_dependsOn(prop);
+}
+
+LayerMaskEffect* layerMaskForSelectedMaskProperty(Property* const prop,
+                                                  const QList<BoundingBox*> &selectedBoxes)
+{
+    if(!prop) {
+        return nullptr;
+    }
+    for(const auto box : selectedBoxes) {
+        if(!box) {
+            continue;
+        }
+        LayerMaskEffect* result = nullptr;
+        box->ca_execOnDescendants([prop, &result](Property* const candidate) {
+            if(result) {
+                return;
+            }
+            const auto layerMask = enve_cast<LayerMaskEffect*>(candidate);
+            if(!layerMask) {
+                return;
+            }
+            if(propertyBelongsToMaskPath(prop, layerMask->maskPathSource())) {
+                result = layerMask;
+            }
+        });
+        if(result) {
+            return result;
+        }
+    }
+    return nullptr;
 }
 
 }
@@ -118,6 +166,7 @@ void Canvas::setWorldToScreen(const QTransform& transform,
                               qreal devicePixelRatio)
 {
     mWorldToScreen = transform;
+    mActiveZoom = transform.m11();
     mDevicePixelRatio = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
     bool invertible = false;
     mScreenToWorld = transform.inverted(&invertible);
@@ -133,7 +182,27 @@ Canvas::~Canvas()
 
 qreal Canvas::getResolution() const
 {
+    if (mResolution < 0.0) {
+        // Auto mode: resolution follows zoom level, capped at 100%
+        return qBound<qreal>(0.01, mActiveZoom, 1.0);
+    }
     return mResolution;
+}
+
+void Canvas::toggleTransparencyGrid()
+{
+    if (mTransparencyGridOn) {
+        // Restore original background color
+        mBackgroundColor->setColor(mSavedBgColor);
+        mTransparencyGridOn = false;
+    } else {
+        // Save current and set to transparent
+        mSavedBgColor = mBackgroundColor->getColor();
+        mBackgroundColor->setColor(QColor(0, 0, 0, 0));
+        mTransparencyGridOn = true;
+    }
+    prp_afterWholeInfluenceRangeChanged();
+    updateAllBoxes(UpdateReason::userChange);
 }
 
 void Canvas::setResolution(const qreal percent)
@@ -157,6 +226,7 @@ void Canvas::queTasks()
         if (!mDrawnSinceQue) { return; }
         mCurrentContainer->queChildrenTasks();
     } else ContainerBox::queTasks();
+    setRelBoundingRect(QRectF(0, 0, mWidth, mHeight));
     mDrawnSinceQue = false;
 }
 
@@ -308,7 +378,7 @@ void Canvas::renderSk(SkCanvas* const canvas,
     const qreal pixelRatio = qApp->devicePixelRatio();
     const SkRect canvasRect = SkRect::MakeWH(mWidth, mHeight);
     const qreal zoom = viewTrans.m11();
-    const auto filter = eFilterSettings::sDisplay(zoom, mResolution);
+    const auto filter = eFilterSettings::sDisplay(zoom, getResolution());
     const qreal qInvZoom = 1/viewTrans.m11() * pixelRatio;
     const float invZoom = toSkScalar(qInvZoom);
     const SkMatrix skViewTrans = toSkMatrix(viewTrans);
@@ -1297,6 +1367,32 @@ void Canvas::deleteAction()
 
 void Canvas::copyAction()
 {
+    QList<RasterEffect*> rasterEffects;
+    QList<TransformEffect*> transformEffects;
+    QList<BlendEffect*> blendEffects;
+    for(const auto prop : mSelectedProps.getList()) {
+        if(const auto effect = enve_cast<RasterEffect*>(prop)) {
+            rasterEffects << effect;
+        } else if(const auto effect = enve_cast<TransformEffect*>(prop)) {
+            transformEffects << effect;
+        } else if(const auto effect = enve_cast<BlendEffect*>(prop)) {
+            if(!blendEffects.contains(effect)) {
+                blendEffects << effect;
+            }
+        } else if(const auto layerMask = layerMaskForSelectedMaskProperty(
+                      prop, mSelectedBoxes.getList())) {
+            if(!blendEffects.contains(layerMask)) {
+                blendEffects << layerMask;
+            }
+        }
+    }
+    if(!rasterEffects.isEmpty() || !transformEffects.isEmpty() || !blendEffects.isEmpty()) {
+        const auto container = enve::make_shared<EffectsClipboard>(
+                    rasterEffects, transformEffects, blendEffects);
+        Document::sInstance->replaceClipboard(container);
+        return;
+    }
+
     if (mSelectedBoxes.isEmpty()) { return; }
     const auto container = enve::make_shared<BoxesClipboard>(mSelectedBoxes.getList());
     Document::sInstance->replaceClipboard(container);
@@ -1304,14 +1400,77 @@ void Canvas::copyAction()
 
 void Canvas::pasteAction()
 {
+    if(const auto container = Document::sInstance->getEffectsClipboard()) {
+        bool pasted = false;
+        for(const auto box : mSelectedBoxes.getList()) {
+            if(!box) continue;
+            pasted = container->pasteTo(box) || pasted;
+        }
+        if(pasted) {
+            mDocument.actionFinished();
+            return;
+        }
+    }
+
     const auto container = Document::sInstance->getBoxesClipboard();
     if (!container) { return; }
     clearBoxesSelection();
     container->pasteTo(mCurrentContainer);
 }
 
+namespace {
+bool removeEffectForCut(Property* const prop)
+{
+    if(const auto effect = enve_cast<RasterEffect*>(prop)) {
+        const auto parent = effect->getParent<DynamicComplexAnimatorBase<RasterEffect>>();
+        if(parent) {
+            parent->removeChild(effect->ref<RasterEffect>());
+            return true;
+        }
+    } else if(const auto effect = enve_cast<TransformEffect*>(prop)) {
+        const auto parent = effect->getParent<DynamicComplexAnimatorBase<TransformEffect>>();
+        if(parent) {
+            parent->removeChild(effect->ref<TransformEffect>());
+            return true;
+        }
+    } else if(const auto blendEffect = enve_cast<BlendEffect*>(prop)) {
+        const auto parent = blendEffect->getParent<DynamicComplexAnimatorBase<BlendEffect>>();
+        if(parent) {
+            parent->removeChild(blendEffect->ref<BlendEffect>());
+            return true;
+        }
+    }
+    return false;
+}
+}
+
 void Canvas::cutAction()
 {
+    if(!mSelectedProps.isEmpty()) {
+        copyAction();
+        bool removed = false;
+        const auto selected = mSelectedProps.getList();
+        QList<LayerMaskEffect*> layerMaskEffectsToRemove;
+        for(const auto prop : selected) {
+            const auto layerMask = layerMaskForSelectedMaskProperty(
+                      prop, mSelectedBoxes.getList());
+            if(layerMask && !layerMaskEffectsToRemove.contains(layerMask)) {
+                layerMaskEffectsToRemove << layerMask;
+            }
+        }
+        for(const auto layerMask : layerMaskEffectsToRemove) {
+            removed = removeEffectForCut(layerMask) || removed;
+        }
+        for(const auto prop : selected) {
+            removed = removeEffectForCut(prop) || removed;
+        }
+        if(removed) {
+            mSelectedProps.clear();
+            mDocument.actionFinished();
+            return;
+        }
+    }
+
     if (mSelectedBoxes.isEmpty()) { return; }
     copyAction();
     deleteAction();
@@ -1940,7 +2099,8 @@ void Canvas::readBoxOrSoundXEV(XevReadBoxesHandler& boxReadHandler,
 
 int Canvas::getByteCountPerFrame()
 {
-    return qCeil(mWidth*mResolution)*qCeil(mHeight*mResolution)*4;
+    const qreal res = getResolution();
+    return qCeil(mWidth*res)*qCeil(mHeight*res)*4;
 }
 
 void Canvas::readGradients(eReadStream& src)

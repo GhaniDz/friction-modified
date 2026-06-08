@@ -30,6 +30,56 @@
 #include "PathEffects/patheffectcollection.h"
 #include "Animators/SmartPath/smartpathcollection.h"
 #include "Properties/boxtargetproperty.h"
+#include "RasterEffects/rastereffectcollection.h"
+#include "TransformEffects/transformeffectcollection.h"
+#include "BlendEffects/blendeffectcollection.h"
+#include "BlendEffects/layermaskeffect.h"
+#include "Boxes/pathbox.h"
+#include "../modules/ae_masks/aemaskmodule.h"
+#include "canvas.h"
+
+qsptr<BoundingBox> readIdCreateBox(eReadStream& src);
+
+namespace {
+
+enum class CopiedBlendEffectKind : int {
+    normal,
+    layerMask
+};
+
+void writeMaskPath(PathBox* const maskPath, eWriteStream& writeStream) {
+    const bool hasMaskPath = maskPath;
+    writeStream << hasMaskPath;
+    if(!hasMaskPath) {
+        return;
+    }
+    const auto future = writeStream.planFuturePos();
+    maskPath->writeIdentifier(writeStream);
+    maskPath->writeBoundingBox(writeStream);
+    writeStream.writeCheckpoint();
+    writeStream.assignFuturePos(future);
+}
+
+qsptr<PathBox> readMaskPath(eReadStream& readStream) {
+    bool hasMaskPath;
+    readStream >> hasMaskPath;
+    if(!hasMaskPath) {
+        return nullptr;
+    }
+    const auto futurePos = readStream.readFuturePos();
+    try {
+        const auto box = readIdCreateBox(readStream);
+        box->readBoundingBox(readStream);
+        readStream.readCheckpoint("Error reading layer mask path");
+        return qSharedPointerCast<PathBox>(box);
+    } catch(const std::exception& e) {
+        readStream.seek(futurePos);
+        gPrintExceptionCritical(e);
+        return nullptr;
+    }
+}
+
+}
 
 Clipboard::Clipboard(const ClipboardType type) : mType(type) {}
 
@@ -55,6 +105,129 @@ void Clipboard::read(const Clipboard::Reader &reader) {
     buffer.close();
 }
 
+EffectsClipboard::EffectsClipboard(const QList<RasterEffect*> &rasterEffects,
+                                   const QList<TransformEffect*> &transformEffects,
+                                   const QList<BlendEffect*> &blendEffects) :
+    Clipboard(ClipboardType::effects) {
+    write([&rasterEffects, &transformEffects, &blendEffects](eWriteStream& writeStream) {
+        int nEffects = 0;
+        for(const auto effect : rasterEffects) if(effect) nEffects++;
+        for(const auto effect : transformEffects) if(effect) nEffects++;
+        for(const auto effect : blendEffects) if(effect) nEffects++;
+        writeStream << nEffects;
+        for(const auto effect : rasterEffects) {
+            if(!effect) continue;
+            writeStream << static_cast<int>(EffectsType::raster);
+            const auto future = writeStream.planFuturePos();
+            writeRasterEffectType(effect, writeStream);
+            effect->prp_writeProperty(writeStream);
+            writeStream.assignFuturePos(future);
+        }
+        for(const auto effect : transformEffects) {
+            if(!effect) continue;
+            writeStream << static_cast<int>(EffectsType::transform);
+            const auto future = writeStream.planFuturePos();
+            writeTransformEffectType(effect, writeStream);
+            effect->prp_writeProperty(writeStream);
+            writeStream.assignFuturePos(future);
+        }
+        for(const auto effect : blendEffects) {
+            if(!effect) continue;
+            writeStream << static_cast<int>(EffectsType::blend);
+            const auto future = writeStream.planFuturePos();
+            const auto layerMask = enve_cast<LayerMaskEffect*>(effect);
+            writeStream << static_cast<int>(layerMask ? CopiedBlendEffectKind::layerMask
+                                                      : CopiedBlendEffectKind::normal);
+            if(layerMask) {
+                writeMaskPath(layerMask->maskPathSource(), writeStream);
+            }
+            writeBlendEffectType(effect, writeStream);
+            effect->prp_writeProperty(writeStream);
+            writeStream.assignFuturePos(future);
+        }
+    });
+}
+
+EffectsClipboard::EffectsClipboard(const QList<RasterEffect*> &rasterEffects) :
+    EffectsClipboard(rasterEffects, {}, {}) {}
+
+EffectsClipboard::EffectsClipboard(const QList<TransformEffect*> &transformEffects) :
+    EffectsClipboard({}, transformEffects, {}) {}
+
+EffectsClipboard::EffectsClipboard(const QList<BlendEffect*> &blendEffects) :
+    EffectsClipboard({}, {}, blendEffects) {}
+
+EffectsClipboard::EffectsClipboard(RasterEffect * const rasterEffect) :
+    EffectsClipboard(QList<RasterEffect*>() << rasterEffect) {}
+
+EffectsClipboard::EffectsClipboard(TransformEffect * const transformEffect) :
+    EffectsClipboard(QList<TransformEffect*>() << transformEffect) {}
+
+EffectsClipboard::EffectsClipboard(BlendEffect * const blendEffect) :
+    EffectsClipboard(QList<BlendEffect*>() << blendEffect) {}
+
+bool EffectsClipboard::pasteTo(BoundingBox * const target) {
+    if(!target) return false;
+
+    bool pasted = false;
+    read([target, &pasted](eReadStream& readStream) {
+        int nEffects;
+        readStream >> nEffects;
+        for(int i = 0; i < nEffects; i++) {
+            int typeInt;
+            readStream >> typeInt;
+            const auto type = static_cast<EffectsType>(typeInt);
+            const auto futurePos = readStream.readFuturePos();
+            try {
+                if(type == EffectsType::raster) {
+                    const auto effect = readIdCreateRasterEffect(readStream);
+                    effect->prp_readProperty(readStream);
+                    target->addRasterEffect(effect);
+                } else if(type == EffectsType::transform) {
+                    const auto effect = readIdCreateTransformEffect(readStream);
+                    effect->prp_readProperty(readStream);
+                    target->addTransformEffect(effect);
+                } else if(type == EffectsType::blend) {
+                    int kindInt;
+                    readStream >> kindInt;
+                    const auto kind = static_cast<CopiedBlendEffectKind>(kindInt);
+                    const auto maskPath = kind == CopiedBlendEffectKind::layerMask ?
+                                readMaskPath(readStream) : qsptr<PathBox>();
+                    const auto effect = readIdCreateBlendEffect(readStream);
+                    effect->prp_readProperty(readStream);
+                    if(const auto layerMask = enve_cast<LayerMaskEffect*>(effect.get())) {
+                        if(maskPath) {
+                            const QString maskName = AeMaskModule::nextMaskName(target, nullptr);
+                            maskPath->prp_setName(maskName);
+                            AeMaskModule::attachLayerMaskPath(target, maskPath.get());
+                            layerMask->setClipPathSource(maskPath.get());
+                            target->addBlendEffect(effect);
+                            layerMask->syncMaskDisplayName();
+                            target->ensureBlendEffectsVisible();
+                            target->refreshCanvasControls();
+                            target->prp_afterWholeInfluenceRangeChanged();
+                            if(auto* const scene = target->getParentScene()) {
+                                AeMaskModule::syncSelection(scene, target);
+                                scene->requestUpdate();
+                            }
+                        } else {
+                            layerMask->setClipPathSource(nullptr);
+                            target->addBlendEffect(effect);
+                        }
+                    } else {
+                        target->addBlendEffect(effect);
+                    }
+                }
+                pasted = true;
+            } catch(const std::exception& e) {
+                readStream.seek(futurePos);
+                gPrintExceptionCritical(e);
+            }
+        }
+    });
+    return pasted;
+}
+
 BoxesClipboard::BoxesClipboard(const QList<BoundingBox*> &src) :
     Clipboard(ClipboardType::boxes) {
     const auto writer = [&src](eWriteStream& writeStream) {
@@ -77,7 +250,6 @@ BoxesClipboard::BoxesClipboard(const QList<BoundingBox*> &src) :
     BoundingBox::sClearWriteBoxes();
 }
 
-#include "canvas.h"
 void BoxesClipboard::pasteTo(ContainerBox* const parent) {
     const int oldCount = parent->getContainedBoxesCount();
     const auto reader = [parent](eReadStream& readStream) {

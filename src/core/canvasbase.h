@@ -91,6 +91,16 @@ public:
     }
 
     template <class T = Property>
+    void execOpOnSelectedProperties(const std::function<void(const QList<T*>&)> &op) {
+        QList<T*> all;
+        for(const auto prop : mSelectedProps) {
+            const auto t = enve_cast<T*>(prop);
+            if(t) all << t;
+        }
+        op(all);
+    }
+
+    template <class T = Property>
     void execOpOnSelectedProperties(const std::function<void(T*)> &op) {
         for(const auto prop : mSelectedProps) {
             const auto t = enve_cast<T*>(prop);
@@ -107,6 +117,7 @@ public:
 
     int selectedBoxesCount() const { return mSelectedBoxes.count(); }
     QList<BoundingBox*> getSelectedBoxes() const { return mSelectedBoxes.getList(); }
+    bool hasSelectedProperties() const { return !mSelectedProps.isEmpty(); }
 
     void removeFromSelectedProps(Property* const prop) {
         mSelectedProps.removeObj(prop);

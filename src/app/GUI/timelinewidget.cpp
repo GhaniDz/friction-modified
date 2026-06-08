@@ -939,8 +939,12 @@ void TimelineWidget::showGroupFlowPopup()
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(4);
 
-    const auto sceneChain = MainWindow::sGetInstance()
-                                ? MainWindow::sGetInstance()->sceneNavigationChain()
+    const auto mainWindow = MainWindow::sGetInstance();
+    const auto sceneChain = mainWindow
+                                ? mainWindow->sceneReferenceChain(mCurrentScene)
+                                : QList<Canvas*>();
+    const auto parentScenes = mainWindow
+                                ? mainWindow->parentScenesForScene(mCurrentScene)
                                 : QList<Canvas*>();
 
     auto addArrow = [popup, layout]() {
@@ -973,7 +977,34 @@ void TimelineWidget::showGroupFlowPopup()
     const bool hasGroups = !groupChain.isEmpty();
 
     // Always show scene chain breadcrumbs (multi-comp navigation)
-    if (sceneChain.count() > 1) {
+    if (parentScenes.count() > 1) {
+        for (int i = 0; i < parentScenes.count(); ++i) {
+            if (i > 0) {
+                auto *separator = new QLabel(QStringLiteral("|"), popup);
+                separator->setObjectName(QStringLiteral("AeTimelineFlowArrow"));
+                layout->addWidget(separator);
+            }
+            auto *parentScene = parentScenes.at(i);
+            addNode(parentScene->prp_getName(),
+                    false,
+                    [parentScene]() {
+                activateSceneWorkspace(*Document::sInstance, parentScene);
+            });
+        }
+        addArrow();
+        addNode(mCurrentScene->prp_getName(), !hasGroups, [this]() {
+            mCurrentScene->setCurrentBoxesGroup(mCurrentScene);
+            clearAeRevealPreset();
+            setTarget(SWT_Target::canvas);
+        });
+        for (int i = 0; i < groupChain.count(); ++i) {
+            addArrow();
+            auto *group = groupChain.at(i);
+            addNode(group->prp_getName(),
+                    i == groupChain.count() - 1,
+                    [this, group]() { enterGroup(group); });
+        }
+    } else if (sceneChain.count() > 1) {
         for (int i = 0; i < sceneChain.count(); ++i) {
             if (i > 0) {
                 addArrow();

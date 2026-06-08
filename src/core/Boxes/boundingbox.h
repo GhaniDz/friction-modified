@@ -138,6 +138,7 @@ protected:
 public:
     virtual bool isGroup() const { return false; }
     virtual bool isLayer() const { return false; }
+    virtual BoundingBox* getLinkBoxTarget() const { return nullptr; }
 
     virtual qsptr<BoundingBox> createLink(const bool inner);
 
@@ -406,6 +407,7 @@ public:
 
     void addBlendEffect(const qsptr<BlendEffect> &blendEffect);
     void ensureBlendEffectsVisible();
+    void applyBlendEffectsToCanvas(SkCanvas * const canvas);
     void addTransformEffect(const qsptr<TransformEffect> &transformEffect);
     ParentEffect *getParentEffect() const;
     BoundingBox *getParentEffectTarget() const;

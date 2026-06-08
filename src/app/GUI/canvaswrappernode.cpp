@@ -28,6 +28,7 @@
 #include "widgets/editablecombobox.h"
 #include "widgets/toolinteract.h"
 #include "Private/document.h"
+#include "Private/esettings.h"
 #include "mainwindow.h"
 
 #include <QHBoxLayout>
@@ -104,10 +105,7 @@ public:
         layout->addWidget(resolutionLabel);
 
         mResolutionCombo = new EditableComboBox(this);
-        mResolutionCombo->addItem(QStringLiteral("500 %"));
-        mResolutionCombo->addItem(QStringLiteral("400 %"));
-        mResolutionCombo->addItem(QStringLiteral("300 %"));
-        mResolutionCombo->addItem(QStringLiteral("200 %"));
+        mResolutionCombo->addItem(QStringLiteral("Auto"));
         mResolutionCombo->addItem(QStringLiteral("100 %"));
         mResolutionCombo->addItem(QStringLiteral("75 %"));
         mResolutionCombo->addItem(QStringLiteral("50 %"));
@@ -142,6 +140,15 @@ public:
         mRecallButton->setAutoRaise(true);
         mRecallButton->setFixedHeight(22);
         layout->addWidget(mRecallButton);
+
+        mTransparencyGridButton = new QToolButton(this);
+        mTransparencyGridButton->setIcon(QIcon(QStringLiteral(":/icons/hicolor/scalable/actions/transparency-grid.svg")));
+        mTransparencyGridButton->setToolTip(tr("Toggle transparency grid (checkerboard background)."));
+        mTransparencyGridButton->setCheckable(true);
+        mTransparencyGridButton->setAutoRaise(true);
+        mTransparencyGridButton->setFixedHeight(22);
+        mTransparencyGridButton->setIconSize(QSize(18, 18));
+        layout->addWidget(mTransparencyGridButton);
 
         layout->addStretch();
 
@@ -219,6 +226,14 @@ public:
         connect(mWindow, &CanvasWindow::currentSceneChanged,
                 this, [this](Canvas *) {
             syncResolutionFromScene();
+            syncTransparencyGridButton();
+        });
+
+        connect(mTransparencyGridButton, &QToolButton::toggled,
+                this, [this](bool checked) {
+            if (!mWindow) { return; }
+            Q_UNUSED(checked)
+            mWindow->toggleTransparencyGrid();
         });
     }
 
@@ -228,23 +243,35 @@ private:
         if (!mResolutionCombo) {
             return;
         }
-        const auto *scene = mWindow ? mWindow->getCurrentCanvas() : nullptr;
-        const QString text = scene ?
-                    QStringLiteral("%1 %").arg(qRound(scene->getResolution() * 100.0)) :
-                    QStringLiteral("100 %");
+        const qreal globalRes = eSettings::sPreviewResolution();
         mResolutionCombo->blockSignals(true);
-        mResolutionCombo->setCurrentText(text);
+        if (globalRes < 0.0) {
+            mResolutionCombo->setCurrentText(QStringLiteral("Auto"));
+        } else {
+            mResolutionCombo->setCurrentText(
+                QStringLiteral("%1 %").arg(qRound(globalRes * 100.0)));
+        }
         mResolutionCombo->blockSignals(false);
     }
 
-    void applyResolutionText(QString text)
+    void applyResolutionText(const QString &text)
     {
         if (!mWindow) {
             return;
         }
-        const qreal resolution = qBound<qreal>(1.0,
-                                               text.remove('%').simplified().toDouble(),
-                                               1000.0) / 100.0;
+        qreal resolution = 0.0;
+        if (text.trimmed().compare(QStringLiteral("Auto"), Qt::CaseInsensitive) == 0) {
+            resolution = -1.0;
+        } else {
+            QString cleaned = text;
+            cleaned.remove('%');
+            cleaned = cleaned.simplified();
+            bool ok = false;
+            const int pct = cleaned.toInt(&ok);
+            if (!ok || pct <= 0) { return; }
+            resolution = qBound<qreal>(0.01, qreal(pct) / 100.0, 1.0);
+        }
+        eSettings::setPreviewResolution(resolution);
         mWindow->setResolution(resolution);
         syncResolutionFromScene();
 
@@ -252,7 +279,8 @@ private:
             if (mw->statusBar()) {
                 mw->statusBar()->showMessage(
                     tr("AE: Preview Resolution %1")
-                        .arg(QStringLiteral("%1 %").arg(qRound(resolution * 100.0))),
+                        .arg(resolution < 0.0 ? QStringLiteral("Auto")
+                             : QStringLiteral("%1 %").arg(qRound(resolution * 100.0))),
                     2000);
             }
         }
@@ -263,6 +291,17 @@ private:
     QToolButton *mSnapshotButton = nullptr;
     QToolButton *mCropButton = nullptr;
     QToolButton *mRecallButton = nullptr;
+    QToolButton *mTransparencyGridButton = nullptr;
+
+    void syncTransparencyGridButton()
+    {
+        if (!mTransparencyGridButton || !mWindow) { return; }
+        const auto *canvas = mWindow->getCurrentCanvas();
+        const bool on = canvas ? canvas->isTransparencyGridOn() : false;
+        mTransparencyGridButton->blockSignals(true);
+        mTransparencyGridButton->setChecked(on);
+        mTransparencyGridButton->blockSignals(false);
+    }
 };
 
 CanvasWrapperNode::CanvasWrapperNode(Canvas* const scene) :

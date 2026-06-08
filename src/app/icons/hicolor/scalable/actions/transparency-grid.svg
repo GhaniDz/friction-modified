@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- 透明度棋盘格图标 -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2">
+    <!-- 矩形框 -->
+    <rect x="2" y="2" width="16" height="16" rx="1.5"/>
+    <!-- 棋盘格四个小方块 -->
+    <rect x="4" y="4" width="5" height="5" fill="#ffffff" stroke="none" opacity="0.5"/>
+    <rect x="11" y="11" width="5" height="5" fill="#ffffff" stroke="none" opacity="0.5"/>
+    <!-- 对角线阴影 -->
+    <rect x="11" y="4" width="5" height="5" fill="#ffffff" stroke="none" opacity="0.15"/>
+    <rect x="4" y="11" width="5" height="5" fill="#ffffff" stroke="none" opacity="0.15"/>
+  </g>
+</svg>

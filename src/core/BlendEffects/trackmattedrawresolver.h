@@ -41,11 +41,19 @@ struct DrawData {
     }
 };
 
+enum class CoordinateMode {
+    Render,
+    Display
+};
+
 inline DrawData resolve(const BoundingBox* const box,
                         const qreal relFrame,
-                        const stdsptr<BoxRenderData>& renderData) {
+                        const stdsptr<BoxRenderData>& renderData,
+                        const CoordinateMode coordinateMode) {
     DrawData result;
-    if(box && Actions::sInstance && Actions::sInstance->smoothChange() &&
+    const bool displayMode = coordinateMode == CoordinateMode::Display;
+    if(displayMode && box && Actions::sInstance &&
+       Actions::sInstance->smoothChange() &&
        box->hasLatestFinishedDisplayData(relFrame)) {
         result.fBounds = box->getLatestFinishedDisplayRect(relFrame);
         result.fBlendMode = renderData ? renderData->fBlendMode
@@ -63,7 +71,7 @@ inline DrawData resolve(const BoundingBox* const box,
         if(box &&
            (!isZero4Dec(renderData->fRelFrame - relFrame) ||
             !matricesMatch(renderData->fTotalTransform, currentTransform))) {
-            if(renderData->fRenderedImage &&
+            if(displayMode && renderData->fRenderedImage &&
                !renderData->fUseRenderTransform) {
                 const QMatrix paintTransform =
                         displayTransform(renderData.get(), currentTransform);
@@ -91,7 +99,7 @@ inline DrawData resolve(const BoundingBox* const box,
     } else if(box) {
         const auto latestFinished = box->getLatestFinishedRenderData(relFrame);
         if(latestFinished) {
-            if(latestFinished->fRenderedImage &&
+            if(displayMode && latestFinished->fRenderedImage &&
                !latestFinished->fUseRenderTransform) {
                 const QMatrix paintTransform =
                         displayTransform(latestFinished.get(), currentTransform);
@@ -120,10 +128,28 @@ inline DrawData resolve(const BoundingBox* const box,
         return result;
     }
 
-    result.fBounds = QRectF(resolvedRenderData->fGlobalRect);
+    QMatrix paintTransform;
+    if(displayMode) {
+        // Display path draws onto the live canvas and must match
+        // RenderContainer::drawSkRaw(), which applies scale(1/fResolution).
+        const qreal dataRes = resolvedRenderData->fResolution > 0.
+                              ? resolvedRenderData->fResolution : 1.;
+        const qreal invRes = 1./dataRes;
+        paintTransform.scale(invRes, invRes);
+    }
+
+    result.fBounds = displayMode
+            ? paintTransform.mapRect(QRectF(resolvedRenderData->fGlobalRect))
+            : QRectF(resolvedRenderData->fGlobalRect);
     result.fBlendMode = resolvedRenderData->fBlendMode;
-    result.fDrawRaw = [resolvedRenderData](SkCanvas * const canvas, SkPaint& paint) {
+    result.fDrawRaw = [resolvedRenderData, paintTransform, displayMode](
+            SkCanvas * const canvas, SkPaint& paint) {
+        canvas->save();
+        if(displayMode) {
+            canvas->concat(toSkMatrix(paintTransform));
+        }
         resolvedRenderData->drawOnParentLayerRaw(canvas, paint);
+        canvas->restore();
     };
     return result;
 }

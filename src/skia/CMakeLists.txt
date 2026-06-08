@@ -148,25 +148,65 @@ if(UNIX AND NOT APPLE)
     set(SKIA_ARGS "${SKIA_ARGS} skia_use_system_freetype2=${SKIA_ENABLE_EXTERNAL}")
 endif()
 
-ExternalProject_Add(
-    gn
-    SOURCE_DIR ${SKIA_SRC}/gn-src
-    BINARY_DIR ${SKIA_BUILD_DIR}/gn
-    DOWNLOAD_COMMAND :
-    UPDATE_COMMAND :
-    CONFIGURE_COMMAND ${PYTHON_EXECUTABLE} ${SKIA_SRC}/gn-src/build/gen.py --out-path ${SKIA_BUILD_DIR}/gn
-    BUILD_COMMAND ${NINJA_EXECUTABLE} -j${N} -C ${SKIA_BUILD_DIR}/gn
-    INSTALL_COMMAND :
-    USES_TERMINAL_UPDATE true
-    USES_TERMINAL_CONFIGURE true
-    USES_TERMINAL_BUILD true
-)
-
+# Download prebuilt gn binary at configure time.
+# Falls back to find_program; if neither works, the user must install gn manually.
 if(WIN32)
-    set(GN_BIN_PATH ${SKIA_BUILD_DIR}/gn/gn.exe)
+    set(GN_BIN_NAME gn.exe)
 else()
-    set(GN_BIN_PATH ${SKIA_BUILD_DIR}/gn/gn)
+    set(GN_BIN_NAME gn)
 endif()
+set(GN_BIN_DIR ${SKIA_BUILD_DIR}/gn)
+set(GN_BIN_PATH ${GN_BIN_DIR}/${GN_BIN_NAME})
+
+if(EXISTS "${GN_BIN_PATH}")
+    message(STATUS "Found gn at ${GN_BIN_PATH}")
+else()
+    # Try to download a prebuilt gn binary
+    set(GN_DOWNLOAD_URLS
+        "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/git_revision:82d673acb802cee21534c796a59f8cdf26500f53"
+        "https://github.com/nickel-org/gn/releases/download/20230906/gn-linux-amd64.tar.xz"
+    )
+    set(GN_DOWNLOAD_OK FALSE)
+    file(MAKE_DIRECTORY ${GN_BIN_DIR})
+    foreach(gn_url ${GN_DOWNLOAD_URLS})
+        message(STATUS "Trying to download gn from ${gn_url} ...")
+        file(DOWNLOAD "${gn_url}" "${GN_BIN_DIR}/gn-pkg" TIMEOUT 30 STATUS gn_status)
+        list(GET gn_status 0 gn_code)
+        list(GET gn_status 1 gn_msg)
+        if(gn_code EQUAL 0)
+            # Downloaded; extract the binary
+            file(ARCHIVE_EXTRACT INPUT "${GN_BIN_DIR}/gn-pkg" DESTINATION ${GN_BIN_DIR})
+            file(REMOVE "${GN_BIN_DIR}/gn-pkg")
+            if(EXISTS "${GN_BIN_PATH}")
+                set(GN_DOWNLOAD_OK TRUE)
+                message(STATUS "Downloaded gn to ${GN_BIN_PATH}")
+                break()
+            endif()
+            # Try another extraction: the archive might be a zip or tarball
+            file(ARCHIVE_EXTRACT INPUT "${GN_BIN_DIR}/gn-pkg" DESTINATION ${GN_BIN_DIR})
+        else()
+            file(REMOVE "${GN_BIN_DIR}/gn-pkg")
+            message(STATUS "Download failed: ${gn_msg}")
+        endif()
+    endforeach()
+
+    if(NOT GN_DOWNLOAD_OK)
+        # Fallback: search the system
+        find_program(GN_SYSTEM_BIN ${GN_BIN_NAME})
+        if(GN_SYSTEM_BIN)
+            set(GN_BIN_PATH ${GN_SYSTEM_BIN})
+            message(STATUS "Found system gn at ${GN_BIN_PATH}")
+            # Create symlink in build dir for dependency resolution
+            file(MAKE_DIRECTORY ${GN_BIN_DIR})
+            execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${GN_SYSTEM_BIN} ${GN_BIN_DIR}/${GN_BIN_NAME} ERROR_QUIET)
+        else()
+            message(FATAL_ERROR "Cannot find gn. Please install gn manually: https://gn.googlesource.com/gn")
+        endif()
+    endif()
+endif()
+
+# Create a dummy custom target so add_dependencies(skialib gn) still works
+add_custom_target(gn DEPENDS ${GN_BIN_PATH})
 
 ExternalProject_Add(
     skialib

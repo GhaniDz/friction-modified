@@ -122,6 +122,22 @@ void prepareMaskSource(PathBox* const maskPath) {
 
 }
 
+// Resolve the actual layer that should own the mask PathBox.
+// For a pre-comp layer (InternalLinkCanvas), the mask must be stored
+// inside the *target* Canvas's layer, because InternalLinkCanvas does
+// not serialize its children (writeAllContained is skipped).
+ContainerBox* resolveMaskStorageLayer(BoundingBox* const target) {
+    if(!target) return nullptr;
+    // If the target is a link (pre-comp layer), resolve to the actual
+    // Canvas so the mask PathBox is serialized with the target's children.
+    if(target->isLink()) {
+        if(auto* const linkTarget = target->getLinkBoxTarget()) {
+            return linkTarget->getFirstParentLayerOrSelf();
+        }
+    }
+    return target->getFirstParentLayerOrSelf();
+}
+
 namespace AeMaskModule {
 
 bool isDrawableTarget(BoundingBox* const box) {
@@ -140,9 +156,9 @@ QString nextMaskName(BoundingBox* const target,
         return QStringLiteral("Mask 1");
     }
     if(!target) return QStringLiteral("Mask 1");
-    const QString prefix = target->prp_getName() + " Mask ";
+    const QString prefix = QStringLiteral("Mask ");
     int maxIndex = 0;
-    const auto layer = target->getFirstParentLayerOrSelf();
+    const auto layer = resolveMaskStorageLayer(target);
     const auto scanContainer = [prefix, &maxIndex](ContainerBox* const container) {
         if(!container) return;
         for(const auto* child : container->getContainedBoxes()) {
@@ -215,15 +231,15 @@ void syncSelection(Canvas* const scene,
     }
 }
 
-void attachLayerMaskEffect(BoundingBox* const target,
-                           PathBox* const maskPath) {
+void attachLayerMaskPath(BoundingBox* const target,
+                         PathBox* const maskPath) {
     if(!PluginManager::isEnabled(PluginFeature::aeMasks)) {
         return;
     }
     if(!target || !maskPath) return;
 
     ContainerBox* maskStorage = nullptr;
-    if(const auto layer = target->getFirstParentLayerOrSelf()) {
+    if(const auto layer = resolveMaskStorageLayer(target)) {
         for(const auto* child : layer->getContainedBoxes()) {
             auto* group = enve_cast<ContainerBox*>(child);
             if(!group || group->prp_getName() != kAeMaskStorageName) continue;
@@ -263,12 +279,30 @@ void attachLayerMaskEffect(BoundingBox* const target,
         }
     }
     maskPath->anim_setAbsFrame(target->anim_getCurrentAbsFrame());
+}
+
+void attachLayerMaskEffect(BoundingBox* const target,
+                           PathBox* const maskPath) {
+    attachLayerMaskPath(target, maskPath);
+    if(!PluginManager::isEnabled(PluginFeature::aeMasks)) {
+        return;
+    }
+    if(!target || !maskPath) return;
+
+    // For a pre-comp layer (link), add the effect to the resolved target
+    // Canvas so it is serialized alongside the mask PathBox.
+    BoundingBox* effectOwner = target;
+    if(target->isLink()) {
+        if(auto* const linkTarget = target->getLinkBoxTarget()) {
+            effectOwner = linkTarget;
+        }
+    }
 
     const auto effect = enve::make_shared<LayerMaskEffect>();
     effect->setClipPathSource(maskPath);
-    target->addBlendEffect(effect);
+    effectOwner->addBlendEffect(effect);
     effect->syncMaskDisplayName();
-    target->ensureBlendEffectsVisible();
+    effectOwner->ensureBlendEffectsVisible();
     target->refreshCanvasControls();
     target->prp_afterWholeInfluenceRangeChanged();
     if(auto* const scene = target->getParentScene()) {

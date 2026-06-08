@@ -52,6 +52,7 @@
 #include <QTextEdit>
 #include <QTabBar>
 #include <QVBoxLayout>
+#include <QSet>
 
 #include "GUI/edialogs.h"
 #include "dialogs/applyexpressiondialog.h"
@@ -88,6 +89,9 @@
 #include "RasterEffects/rastereffect.h"
 #include "BlendEffects/blendeffectmenucreator.h"
 #include "BlendEffects/blendeffect.h"
+#include "BlendEffects/layermaskeffect.h"
+#include "Boxes/pathbox.h"
+#include "Boxes/internallinkcanvas.h"
 #include "TransformEffects/transformeffectmenucreator.h"
 #include "TransformEffects/transformeffect.h"
 #include "PathEffects/patheffectmenucreator.h"
@@ -120,6 +124,117 @@ bool isFocusedEditorWidget(QWidget *widget)
            widget->inherits("QsciScintilla");
 }
 
+bool propertyBelongsToMaskPath(Property* const prop,
+                               PathBox* const maskPath)
+{
+    if (!prop || !maskPath) {
+        return false;
+    }
+    if (prop == maskPath) {
+        return true;
+    }
+    return maskPath->prp_dependsOn(prop);
+}
+
+LayerMaskEffect* layerMaskForSelectedMaskProperty(Property* const prop,
+                                                  const QList<BoundingBox*> &selectedBoxes)
+{
+    if (!prop) {
+        return nullptr;
+    }
+    for (const auto box : selectedBoxes) {
+        if (!box) {
+            continue;
+        }
+        LayerMaskEffect* result = nullptr;
+        box->ca_execOnDescendants([prop, &result](Property* const candidate) {
+            if (result) {
+                return;
+            }
+            const auto layerMask = enve_cast<LayerMaskEffect*>(candidate);
+            if (!layerMask) {
+                return;
+            }
+            if (propertyBelongsToMaskPath(prop, layerMask->maskPathSource())) {
+                result = layerMask;
+            }
+        });
+        if (result) {
+            return result;
+        }
+    }
+    return nullptr;
+}
+
+void findLinkToTargetRecursive(ContainerBox* const container,
+                               Canvas* const targetScene,
+                               bool &found)
+{
+    if (!container || found) {
+        return;
+    }
+    for (const auto box : container->getContainedBoxes()) {
+        if (found) {
+            break;
+        }
+        if (!box) {
+            continue;
+        }
+        const auto linkCanvas = enve_cast<InternalLinkCanvas*>(box);
+        if (linkCanvas) {
+            const auto finalTarget = enve_cast<Canvas*>(linkCanvas->getFinalTarget());
+            if (finalTarget == targetScene) {
+                found = true;
+                return;
+            }
+        }
+        const auto subContainer = enve_cast<ContainerBox*>(box);
+        if (subContainer) {
+            findLinkToTargetRecursive(subContainer, targetScene, found);
+        }
+    }
+}
+
+QList<Canvas*> parentScenesForScene(Document &document,
+                                    Canvas * const targetScene)
+{
+    QList<Canvas*> parents;
+    if (!targetScene) {
+        return parents;
+    }
+
+    for (const auto &sceneRef : document.fScenes) {
+        auto *scene = sceneRef.get();
+        if (!scene || scene == targetScene) {
+            continue;
+        }
+
+        bool referencesTarget = false;
+        findLinkToTargetRecursive(scene, targetScene, referencesTarget);
+
+        if (referencesTarget) {
+            parents << scene;
+        }
+    }
+
+    return parents;
+}
+
+QList<Canvas*> buildSceneReferenceChain(Document &document,
+                                        Canvas * const scene)
+{
+    QList<Canvas*> chain;
+    QSet<Canvas*> visited;
+    auto *cursor = scene;
+    while (cursor && !visited.contains(cursor)) {
+        visited.insert(cursor);
+        chain.prepend(cursor);
+        const auto parents = parentScenesForScene(document, cursor);
+        cursor = parents.isEmpty() ? nullptr : parents.first();
+    }
+    return chain;
+}
+
 QWidget *editorWidgetFromObject(QObject *object)
 {
     while (object) {
@@ -142,6 +257,22 @@ bool removeEffectProperty(Property *property)
 
     if (const auto parent = effect->template getParent<DynamicComplexAnimatorBase<T>>()) {
         parent->removeChild(effect->template ref<T>());
+        return true;
+    }
+    return false;
+}
+
+template<>
+bool removeEffectProperty<BlendEffect>(Property *property)
+{
+    auto *blendEffect = enve_cast<BlendEffect*>(property);
+    if (!blendEffect) {
+        return false;
+    }
+
+
+    if (const auto parent = blendEffect->getParent<DynamicComplexAnimatorBase<BlendEffect>>()) {
+        parent->removeChild(blendEffect->ref<BlendEffect>());
         return true;
     }
     return false;
@@ -1084,13 +1215,23 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *e)
     const bool focusedEditor = isFocusedEditorWidget(focusWidget);
     const bool eventOnEditor = editorWidgetFromObject(obj) != nullptr;
     if (type == QEvent::KeyPress) {
+        const auto keyEvent = static_cast<QKeyEvent*>(e);
+        if (keyEvent->key() == Qt::Key_Delete && deleteSelectedEffectProperties()) {
+            return true;
+        }
         if (focusedEditor || eventOnEditor) {
             return QMainWindow::eventFilter(obj, e);
         }
-        const auto keyEvent = static_cast<QKeyEvent*>(e);
         const bool timelineContext = isTimelineInputContext();
         const bool effectControlsContext = isEffectControlsInputContext();
         if (keyEvent->key() == Qt::Key_Delete) {
+            if (deleteSelectedEffectProperties()) {
+                return true;
+            }
+            if (mDocument.fActiveScene && mDocument.fActiveScene->hasSelectedProperties()) {
+                (*mActions.deleteAction)();
+                return true;
+            }
             if (effectControlsContext) {
                 deleteSelectedEffectProperties();
                 return true;
@@ -1188,6 +1329,22 @@ bool MainWindow::deleteSelectedEffectProperties()
     }
 
     bool deleted = false;
+
+    QList<LayerMaskEffect*> layerMaskEffectsToDelete;
+    const auto selectedBoxes = scene->getSelectedBoxes();
+    scene->execOpOnSelectedProperties<Property>(
+                [&selectedBoxes, &layerMaskEffectsToDelete](Property *prop) {
+        if (!prop) { return; }
+        const auto layerMask = layerMaskForSelectedMaskProperty(prop, selectedBoxes);
+        if (layerMask && !layerMaskEffectsToDelete.contains(layerMask)) {
+            layerMaskEffectsToDelete << layerMask;
+        }
+    });
+
+    for (const auto layerMask : layerMaskEffectsToDelete) {
+        deleted = deleteEffectProperty(layerMask) || deleted;
+    }
+
     scene->execOpOnSelectedProperties<TransformEffect>(
                 [&deleted](TransformEffect *effect) {
         if (!effect) { return; }
@@ -2040,20 +2197,11 @@ void MainWindow::updateSceneNavigationChain(Canvas *scene)
         return;
     }
 
-    const auto oraChainIds = OraModule::sceneNavigationChainIds(scene);
-    if (!oraChainIds.isEmpty()) {
+    const auto referenceChain = buildSceneReferenceChain(mDocument, scene);
+    if (referenceChain.count() > 1) {
         mSceneNavigationChain.clear();
-        for (const int sceneId : oraChainIds) {
-            for (const auto &candidate : mDocument.fScenes) {
-                if (candidate && candidate->getDocumentId() == sceneId) {
-                    mSceneNavigationChain.append(candidate.get());
-                    break;
-                }
-            }
-        }
-        if (mSceneNavigationChain.isEmpty() ||
-            mSceneNavigationChain.last() != scene) {
-            mSceneNavigationChain.append(scene);
+        for (const auto parentScene : referenceChain) {
+            mSceneNavigationChain.append(parentScene);
         }
         return;
     }
@@ -2064,13 +2212,6 @@ void MainWindow::updateSceneNavigationChain(Canvas *scene)
             mSceneNavigationChain.removeLast();
         }
     } else {
-        if (!mSceneNavigationChain.isEmpty()) {
-            const auto lastOraChain = OraModule::sceneNavigationChainIds(
-                mSceneNavigationChain.last());
-            if (!lastOraChain.isEmpty()) {
-                mSceneNavigationChain.clear();
-            }
-        }
         mSceneNavigationChain.append(scene);
     }
 }
@@ -2496,6 +2637,16 @@ QList<Canvas*> MainWindow::sceneNavigationChain() const
         }
     }
     return chain;
+}
+
+QList<Canvas*> MainWindow::sceneReferenceChain(Canvas *scene) const
+{
+    return buildSceneReferenceChain(mDocument, scene);
+}
+
+QList<Canvas*> MainWindow::parentScenesForScene(Canvas *scene) const
+{
+    return ::parentScenesForScene(mDocument, scene);
 }
 
 void MainWindow::focusFontWidget(const bool focus)

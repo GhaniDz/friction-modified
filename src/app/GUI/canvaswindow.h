@@ -84,6 +84,8 @@ public:
     bool KFT_keyPressEvent(QKeyEvent *event);
 
     void setResolution(const qreal fraction);
+    void toggleTransparencyGrid();
+    bool isTransparencyGridOn() const;
     void updatePivotIfNeeded();
     void schedulePivotUpdate();
 

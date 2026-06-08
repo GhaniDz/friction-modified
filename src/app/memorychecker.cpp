@@ -30,8 +30,8 @@
     #include "windowsincludes.h"
 #elif defined(Q_OS_UNIX)
     #if defined(Q_OS_LINUX)
-        #include "gperftools/tcmalloc.h"
-        #include "../gperftools/include/gperftools/malloc_extension.h"
+        #include <gperftools/tcmalloc.h>
+        #include <gperftools/malloc_extension.h>
         #include <sys/sysinfo.h>
         #include <unistd.h>
     #elif defined(Q_OS_MACOS)
@@ -169,11 +169,22 @@ void MemoryChecker::sGetFreeKB(intKB& procFreeKB,
 #elif defined(Q_OS_UNIX)
     size_t bytes_in_use_by_app = 0;
 #if defined(Q_OS_LINUX)
-    size_t physical_memory_used;
-    size_t virtual_memory_used;
-    MallocExtension::instance()->eMemoryStats(&virtual_memory_used,
-                                              &physical_memory_used,
-                                              &bytes_in_use_by_app);
+    // Read memory stats from /proc/self/statm
+    // Format: size resident shared text lib data dt
+    bytes_in_use_by_app = 0;
+    size_t physical_memory_used = 0;
+    FILE *statm = fopen("/proc/self/statm", "r");
+    if (statm) {
+        size_t size = 0, resident = 0, shared = 0, text = 0, lib = 0, data = 0, dt = 0;
+        if (fscanf(statm, "%zu %zu %zu %zu %zu %zu %zu",
+                   &size, &resident, &shared, &text, &lib, &data, &dt) >= 2) {
+            const long pageSize = sysconf(_SC_PAGESIZE);
+            size_t bytes = resident * pageSize;
+            bytes_in_use_by_app = bytes;
+            physical_memory_used = bytes;
+        }
+        fclose(statm);
+    }
 #elif defined(Q_OS_MACOS)
     task_vm_info_data_t vm_info;
     mach_msg_type_number_t vm_info_count = TASK_VM_INFO_COUNT;

@@ -3,6 +3,8 @@
 #include "Boxes/containerbox.h"
 #include "Boxes/smartvectorpath.h"
 #include "Animators/SmartPath/smartpathcollection.h"
+#include "clipboardcontainer.h"
+#include "Private/document.h"
 
 BlendEffect::BlendEffect(const QString& name,
                          const BlendEffectType type) :
@@ -49,18 +51,16 @@ void BlendEffect::prp_setupTreeViewMenu(PropertyMenu * const menu) {
     if(menu->hasActionsForType<BlendEffect>()) return;
     menu->addedActionsForType<BlendEffect>();
     {
+        const PropertyMenu::AllOp<BlendEffect> cOp =
+        [](const QList<BlendEffect*> &effects) {
+            const auto clipboard = enve::make_shared<EffectsClipboard>(effects);
+            Document::sInstance->replaceClipboard(clipboard);
+        };
+        menu->addPlainAction(QIcon::fromTheme("copy"), tr("Copy Effect(s)"), cOp);
+    }
+    {
         const PropertyMenu::PlainSelectedOp<BlendEffect> dOp =
         [](BlendEffect* const prop) {
-            if(prop->mType == BlendEffectType::layerMask) {
-                if(const auto clip = prop->clipPathSource()) {
-                    const auto parent = clip->getParentGroup();
-                    if(parent &&
-                       (parent->prp_getName() == QStringLiteral("__AE_LAYER_MASKS__") ||
-                        parent->prp_getName() == QStringLiteral("Masks"))) {
-                        clip->removeFromParent_k();
-                    }
-                }
-            }
             const auto parent = prop->template getParent<
                     DynamicComplexAnimatorBase<BlendEffect>>();
             parent->removeChild(prop->template ref<BlendEffect>());

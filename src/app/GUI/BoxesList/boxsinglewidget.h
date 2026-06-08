@@ -194,7 +194,6 @@ private:
 
     QPushButton *mPromoteDemoteToggle = nullptr;
     QPushButton *mMotionBlurToggle = nullptr;
-    QPushButton *mCollapseToggle = nullptr;
     eComboBox *mPropertyComboBox;
     eComboBox *mBlendModeCombo;
     eComboBox *mPathBlendModeCombo;

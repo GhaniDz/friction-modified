@@ -37,8 +37,9 @@ struct CORE_EXPORT LinkCanvasRenderData : public CanvasRenderData {
     void setCachedSceneFrame(ImageCacheContainer* const container);
 protected:
     SkColor eraseColor() const override {
-        if(fClipToCanvas) return fBgColor;
-        else return SK_ColorTRANSPARENT;
+        // In Layer mode (fClipToCanvas), use transparent so the parent
+        // canvas background shows through instead of the target's black bg.
+        return fClipToCanvas ? SK_ColorTRANSPARENT : fBgColor;
     }
 
     void drawSk(SkCanvas * const canvas) override;
