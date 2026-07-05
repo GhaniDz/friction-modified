@@ -7,7 +7,7 @@ This is a 2D animation software based on [Friction](https://github.com/friction2
 
 **⚠️Important Note: This is not the official version of Friction. Please do not submit any issues to the original project maintainers!**
 
-[![Friction Modified Screenshot](https://github.com/GhaniDz/friction-modified/raw/main/screenshot.png)](https://github.com/GhaniDz/friction-modified/blob/main/screenshot.png)
+[![Friction Modified Screenshot](https://github.com/GhaniDz/friction-modified/raw/main/src/Screenshot_2026-07-04_23-38-44.png)](https://github.com/GhaniDz/friction-modified/blob/main/src/Screenshot_2026-07-04_23-38-44.png)
 
 ## ✨ Main features of this version
 
